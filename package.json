@@ -58,7 +58,7 @@
     "react-easy-crop": "^3.5.2",
     "react-hot-toast": "^2.1.0",
     "react-multi-email": "^0.5.3",
-    "react-phone-number-input": "^3.1.25",
+    "react-phone-number-input": "^3.1.27",
     "react-query": "^3.21.0",
     "react-select": "^4.3.1",
     "react-timezone-select": "^1.0.7",
