@@ -1,25 +1,36 @@
-import type { WorkflowStep } from "@prisma/client";
-
+import { isSMSOrWhatsappAction } from "@calcom/features/ee/workflows/lib/actionHelperFunctions";
 import { classNames } from "@calcom/lib";
-import { WorkflowActions } from "@calcom/prisma/enums";
-import { Zap, Smartphone, Mail, Bell } from "@calcom/ui/components/icon";
+import { Icon } from "@calcom/ui";
+
+import type { WorkflowStep } from "../lib/types";
 
 export function getActionIcon(steps: WorkflowStep[], className?: string): JSX.Element {
   if (steps.length === 0) {
-    return <Zap className={classNames(className ? className : "mr-1.5 inline h-3 w-3")} aria-hidden="true" />;
+    return (
+      <Icon
+        name="zap"
+        className={classNames(className ? className : "mr-1.5 inline h-3 w-3")}
+        aria-hidden="true"
+      />
+    );
   }
 
   if (steps.length === 1) {
-    if (steps[0].action === WorkflowActions.SMS_ATTENDEE || steps[0].action === WorkflowActions.SMS_NUMBER) {
+    if (isSMSOrWhatsappAction(steps[0].action)) {
       return (
-        <Smartphone
+        <Icon
+          name="smartphone"
           className={classNames(className ? className : "mr-1.5 inline h-3 w-3")}
           aria-hidden="true"
         />
       );
     } else {
       return (
-        <Mail className={classNames(className ? className : "mr-1.5 inline h-3 w-3")} aria-hidden="true" />
+        <Icon
+          name="mail"
+          className={classNames(className ? className : "mr-1.5 inline h-3 w-3")}
+          aria-hidden="true"
+        />
       );
     }
   }
@@ -29,15 +40,9 @@ export function getActionIcon(steps: WorkflowStep[], className?: string): JSX.El
 
     for (const step of steps) {
       if (!messageType) {
-        messageType =
-          step.action === WorkflowActions.SMS_ATTENDEE || step.action === WorkflowActions.SMS_NUMBER
-            ? "SMS"
-            : "EMAIL";
+        messageType = isSMSOrWhatsappAction(step.action) ? "SMS" : "EMAIL";
       } else if (messageType !== "MIX") {
-        const newMessageType =
-          step.action === WorkflowActions.SMS_ATTENDEE || step.action === WorkflowActions.SMS_NUMBER
-            ? "SMS"
-            : "EMAIL";
+        const newMessageType = isSMSOrWhatsappAction(step.action) ? "SMS" : "EMAIL";
         if (newMessageType !== messageType) {
           messageType = "MIX";
         }
@@ -48,21 +53,34 @@ export function getActionIcon(steps: WorkflowStep[], className?: string): JSX.El
     switch (messageType) {
       case "SMS":
         return (
-          <Smartphone
+          <Icon
+            name="smartphone"
             className={classNames(className ? className : "mr-1.5 inline h-3 w-3")}
             aria-hidden="true"
           />
         );
       case "EMAIL":
         return (
-          <Mail className={classNames(className ? className : "mr-1.5 inline h-3 w-3")} aria-hidden="true" />
+          <Icon
+            name="mail"
+            className={classNames(className ? className : "mr-1.5 inline h-3 w-3")}
+            aria-hidden="true"
+          />
         );
       case "MIX":
         return (
-          <Bell className={classNames(className ? className : "mr-1.5 inline h-3 w-3")} aria-hidden="true" />
+          <Icon
+            name="bell"
+            className={classNames(className ? className : "mr-1.5 inline h-3 w-3")}
+            aria-hidden="true"
+          />
         );
       default:
-        <Zap className={classNames(className ? className : "mr-1.5 inline h-3 w-3")} aria-hidden="true" />;
+        <Icon
+          name="zap"
+          className={classNames(className ? className : "mr-1.5 inline h-3 w-3")}
+          aria-hidden="true"
+        />;
     }
   }
 

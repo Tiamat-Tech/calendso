@@ -8,7 +8,8 @@ import classNames from "@calcom/lib/classNames";
 import { getErrorFromUnknown } from "@calcom/lib/errors";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 
-import { Alert, showToast } from "../";
+import { Alert } from "../components/alert";
+import { showToast } from "../components/toast";
 
 type InputProps = Omit<JSX.IntrinsicElements["input"], "name"> & { name: string };
 
@@ -18,7 +19,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(pro
       {...props}
       ref={ref}
       className={classNames(
-        "border-default mt-1 block w-full rounded-sm border py-2 px-3 shadow-sm focus:border-neutral-800 focus:outline-none focus:ring-1 focus:ring-neutral-800 sm:text-sm",
+        "border-default mt-1 block w-full rounded-sm border px-3 py-2 shadow-sm focus:border-neutral-800 focus:outline-none focus:ring-1 focus:ring-neutral-800 sm:text-sm",
         props.className
       )}
     />
@@ -56,8 +57,8 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(function InputF
   const {
     label = t(props.name),
     labelProps,
-    placeholder = t(props.name + "_placeholder") !== props.name + "_placeholder"
-      ? t(props.name + "_placeholder")
+    placeholder = t(`${props.name}_placeholder`) !== `${props.name}_placeholder`
+      ? t(`${props.name}_placeholder`)
       : "",
     className,
     addOnLeading,
@@ -169,8 +170,8 @@ export const TextAreaField = forwardRef<HTMLTextAreaElement, TextAreaFieldProps>
   const {
     label = t(props.name as string),
     labelProps,
-    placeholder = t(props.name + "_placeholder") !== props.name + "_placeholder"
-      ? t(props.name + "_placeholder")
+    placeholder = t(`${props.name}_placeholder`) !== `${props.name}_placeholder`
+      ? t(`${props.name}_placeholder`)
       : "",
     ...passThrough
   } = props;

@@ -82,14 +82,17 @@ export const AppForm = ({
       label: "Category of App",
       name: "category",
       type: "select",
+
+      // TODO: Refactor and reuse getAppCategories or type as Record<AppCategories,> to enforce consistency
       options: [
-        { label: "Calendar", value: "calendar" },
-        { label: "Video", value: "video" },
-        { label: "Payment", value: "payment" },
-        { label: "Messaging", value: "messaging" },
-        { label: "Web3", value: "web3" },
-        { label: "Automation", value: "automation" },
+        // Manually sorted alphabetically
         { label: "Analytics", value: "analytics" },
+        { label: "Automation", value: "automation" },
+        { label: "Calendar", value: "calendar" },
+        { label: "Conferencing", value: "conferencing" },
+        { label: "CRM", value: "crm" },
+        { label: "Messaging", value: "messaging" },
+        { label: "Payment", value: "payment" },
         { label: "Other", value: "other" },
       ],
       defaultValue: "",
@@ -205,7 +208,7 @@ export const AppForm = ({
             </Text>
             <Text>
               Tip : Go and change the logo of your {isTemplate ? "template" : "app"} by replacing{" "}
-              {getAppDirPath(slug, isTemplate) + "/static/icon.svg"}
+              {`${getAppDirPath(slug, isTemplate)}/static/icon.svg`}
             </Text>
             <Newline />
             <Text bold underline color="blue">

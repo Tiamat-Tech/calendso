@@ -1,138 +1,67 @@
+"use client";
+
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/router";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { useLocale } from "@calcom/lib/hooks/useLocale";
+import { useParamsWithFallback } from "@calcom/lib/hooks/useParamsWithFallback";
 import { MembershipRole } from "@calcom/prisma/enums";
 import { trpc } from "@calcom/trpc/react";
-import type { RouterOutputs } from "@calcom/trpc/react";
-import { Button, Meta, TextField, showToast } from "@calcom/ui";
-import { Plus } from "@calcom/ui/components/icon";
 
-import { getLayout } from "../../../settings/layouts/SettingsLayout";
 import DisableTeamImpersonation from "../components/DisableTeamImpersonation";
-import MemberInvitationModal from "../components/MemberInvitationModal";
-import MemberListItem from "../components/MemberListItem";
+import InviteLinkSettingsModal from "../components/InviteLinkSettingsModal";
+import MakeTeamPrivateSwitch from "../components/MakeTeamPrivateSwitch";
+import { MemberInvitationModalWithoutMembers } from "../components/MemberInvitationModal";
+import MemberList from "../components/MemberList";
 import TeamInviteList from "../components/TeamInviteList";
 
-type Team = RouterOutputs["viewer"]["teams"]["get"];
-
-interface MembersListProps {
-  team: Team | undefined;
-}
-
-const checkIfExist = (comp: string, query: string) =>
-  comp.toLowerCase().replace(/\s+/g, "").includes(query.toLowerCase().replace(/\s+/g, ""));
-
-function MembersList(props: MembersListProps) {
-  const { team } = props;
-  const { t } = useLocale();
-  const [query, setQuery] = useState<string>("");
-
-  const members = team?.members;
-  const membersList = members
-    ? members && query === ""
-      ? members
-      : members.filter((member) => {
-          const email = member.email ? checkIfExist(member.email, query) : false;
-          const username = member.username ? checkIfExist(member.username, query) : false;
-          const name = member.name ? checkIfExist(member.name, query) : false;
-
-          return email || username || name;
-        })
-    : undefined;
-  return (
-    <div className="flex flex-col gap-y-3">
-      <TextField
-        type="search"
-        autoComplete="false"
-        onChange={(e) => setQuery(e.target.value)}
-        value={query}
-        placeholder={`${t("search")}...`}
-      />
-      {membersList?.length && team ? (
-        <ul className="divide-subtle border-subtle divide-y rounded-md border ">
-          {membersList.map((member) => {
-            return <MemberListItem key={member.id} team={team} member={member} />;
-          })}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 const MembersView = () => {
-  const { t, i18n } = useLocale();
+  const { t } = useLocale();
+  const [showMemberInvitationModal, setShowMemberInvitationModal] = useState(false);
+  const [showInviteLinkSettingsModal, setInviteLinkSettingsModal] = useState(false);
   const router = useRouter();
   const session = useSession();
-  const utils = trpc.useContext();
-  const showDialog = router.query.inviteModal === "true";
-  const [showMemberInvitationModal, setShowMemberInvitationModal] = useState(showDialog);
-  const teamId = Number(router.query.id);
+  const org = session?.data?.user.org;
+  const params = useParamsWithFallback();
 
-  const { data: team, isLoading } = trpc.viewer.teams.get.useQuery(
+  const teamId = Number(params.id);
+
+  const {
+    data: team,
+    isPending: isTeamsLoading,
+    error: teamError,
+  } = trpc.viewer.teams.get.useQuery(
     { teamId },
     {
-      onError: () => {
-        router.push("/settings");
-      },
+      enabled: !!teamId,
     }
   );
-
-  const inviteMemberMutation = trpc.viewer.teams.inviteMember.useMutation({
-    async onSuccess(data) {
-      await utils.viewer.teams.get.invalidate();
-      setShowMemberInvitationModal(false);
-      if (data.sendEmailInvitation) {
-        if (Array.isArray(data.usernameOrEmail)) {
-          showToast(
-            t("email_invite_team_bulk", {
-              userCount: data.usernameOrEmail.length,
-            }),
-            "success"
-          );
-        } else {
-          showToast(
-            t("email_invite_team", {
-              email: data.usernameOrEmail,
-            }),
-            "success"
-          );
-        }
+  useEffect(
+    function refactorMeWithoutEffect() {
+      if (teamError) {
+        router.replace("/teams");
       }
     },
-    onError: (error) => {
-      showToast(error.message, "error");
-    },
-  });
+    [teamError]
+  );
+
+  const isPending = isTeamsLoading;
 
   const isInviteOpen = !team?.membership.accepted;
 
   const isAdmin =
     team && (team.membership.role === MembershipRole.OWNER || team.membership.role === MembershipRole.ADMIN);
 
+  const isOrgAdminOrOwner = org?.role === MembershipRole.OWNER || org?.role === MembershipRole.ADMIN;
+
+  const hideInvitationModal = () => {
+    setShowMemberInvitationModal(false);
+  };
+
   return (
     <>
-      <Meta
-        title={t("team_members")}
-        description={t("members_team_description")}
-        CTA={
-          isAdmin ? (
-            <Button
-              type="button"
-              color="primary"
-              StartIcon={Plus}
-              className="ml-auto"
-              onClick={() => setShowMemberInvitationModal(true)}
-              data-testid="new-member-button">
-              {t("add")}
-            </Button>
-          ) : (
-            <></>
-          )
-        }
-      />
-      {!isLoading && (
+      {!isPending && (
         <>
           <div>
             {team && (
@@ -143,7 +72,6 @@ const MembersView = () => {
                       {
                         id: team.id,
                         accepted: team.membership.accepted || false,
-                        logo: team.logo,
                         name: team.name,
                         slug: team.slug,
                         role: team.membership.role,
@@ -153,8 +81,38 @@ const MembersView = () => {
                 )}
               </>
             )}
-            <MembersList team={team} />
-            <hr className="border-subtle my-8" />
+
+            {((team?.isPrivate && isAdmin) || !team?.isPrivate || isOrgAdminOrOwner) && team && (
+              <div className="mb-6">
+                <MemberList
+                  team={team}
+                  isOrgAdminOrOwner={isOrgAdminOrOwner}
+                  setShowMemberInvitationModal={setShowMemberInvitationModal}
+                />
+              </div>
+            )}
+            {showMemberInvitationModal && team && team.id && (
+              <MemberInvitationModalWithoutMembers
+                hideInvitationModal={hideInvitationModal}
+                showMemberInvitationModal={showMemberInvitationModal}
+                teamId={team.id}
+                token={team.inviteToken?.token}
+                onSettingsOpen={() => setInviteLinkSettingsModal(true)}
+              />
+            )}
+
+            {showInviteLinkSettingsModal && team?.inviteToken && team.id && (
+              <InviteLinkSettingsModal
+                isOpen={showInviteLinkSettingsModal}
+                teamId={team.id}
+                token={team.inviteToken.token}
+                expiresInDays={team.inviteToken.expiresInDays || undefined}
+                onExit={() => {
+                  setInviteLinkSettingsModal(false);
+                  setShowMemberInvitationModal(true);
+                }}
+              />
+            )}
 
             {team && session.data && (
               <DisableTeamImpersonation
@@ -163,30 +121,20 @@ const MembersView = () => {
                 disabled={isInviteOpen}
               />
             )}
-            <hr className="border-subtle my-8" />
+
+            {team && team.id && (isAdmin || isOrgAdminOrOwner) && (
+              <MakeTeamPrivateSwitch
+                isOrg={false}
+                teamId={team.id}
+                isPrivate={team.isPrivate ?? false}
+                disabled={isInviteOpen}
+              />
+            )}
           </div>
-          {showMemberInvitationModal && team && (
-            <MemberInvitationModal
-              isOpen={showMemberInvitationModal}
-              members={team.members}
-              onExit={() => setShowMemberInvitationModal(false)}
-              onSubmit={(values) => {
-                inviteMemberMutation.mutate({
-                  teamId,
-                  language: i18n.language,
-                  role: values.role,
-                  usernameOrEmail: values.emailOrUsername,
-                  sendEmailInvitation: values.sendInviteEmail,
-                });
-              }}
-            />
-          )}
         </>
       )}
     </>
   );
 };
-
-MembersView.getLayout = getLayout;
 
 export default MembersView;

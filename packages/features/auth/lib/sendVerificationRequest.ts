@@ -15,7 +15,7 @@ const transporter = nodemailer.createTransport<TransportOptions>({
 const sendVerificationRequest = async ({ identifier, url }: SendVerificationRequestParams) => {
   const emailsDir = path.resolve(process.cwd(), "..", "..", "packages/emails", "templates");
   const originalUrl = new URL(url);
-  const webappUrl = new URL(WEBAPP_URL);
+  const webappUrl = new URL(process.env.NEXTAUTH_URL || WEBAPP_URL);
   if (originalUrl.origin !== webappUrl.origin) {
     url = url.replace(originalUrl.origin, webappUrl.origin);
   }
@@ -27,7 +27,7 @@ const sendVerificationRequest = async ({ identifier, url }: SendVerificationRequ
   transporter.sendMail({
     from: `${process.env.EMAIL_FROM}` || APP_NAME,
     to: identifier,
-    subject: "Your sign-in link for " + APP_NAME,
+    subject: `Your sign-in link for ${APP_NAME}`,
     html: emailTemplate({
       base_url: WEBAPP_URL,
       signin_url: url,

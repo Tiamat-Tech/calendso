@@ -1,13 +1,15 @@
 import type { z } from "zod";
 
-import type { EventTypeModel } from "@calcom/prisma/zod";
-import type { EventTypeMetaDataSchema } from "@calcom/prisma/zod-utils";
+import type { BookerEvent } from "@calcom/features/bookings/types";
+import type { eventTypeMetaDataSchemaWithTypedApps } from "@calcom/prisma/zod-utils";
 
-export type EventTypeApps = NonNullable<NonNullable<z.infer<typeof EventTypeMetaDataSchema>>["apps"]>;
+export type EventTypeApps = NonNullable<
+  NonNullable<z.infer<typeof eventTypeMetaDataSchemaWithTypedApps>>["apps"]
+>;
 export type EventTypeAppsList = keyof EventTypeApps;
 
 export const getEventTypeAppData = <T extends EventTypeAppsList>(
-  eventType: Pick<z.infer<typeof EventTypeModel>, "price" | "currency" | "metadata">,
+  eventType: Pick<BookerEvent, "price" | "currency" | "metadata">,
   appId: T,
   forcedGet?: boolean
 ): EventTypeApps[T] => {
@@ -18,12 +20,14 @@ export const getEventTypeAppData = <T extends EventTypeAppsList>(
     return allowDataGet
       ? {
           ...appMetadata,
+          // We should favor eventType's price and currency over appMetadata's price and currency
+          price: eventType.price || appMetadata.price || null,
+          currency: eventType.currency || appMetadata.currency || null,
           // trackingId is legacy way to store value for TRACKING_ID. So, we need to support both.
-          TRACKING_ID: appMetadata.TRACKING_ID || appMetadata.trackingId,
+          TRACKING_ID: appMetadata.TRACKING_ID || appMetadata.trackingId || null,
         }
       : null;
   }
-
   // Backward compatibility for existing event types.
   // TODO: After the new AppStore EventType App flow is stable, write a migration to migrate metadata to new format which will let us remove this compatibility code
   // Migration isn't being done right now, to allow a revert if needed

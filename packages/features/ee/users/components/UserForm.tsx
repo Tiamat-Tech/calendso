@@ -1,11 +1,22 @@
+// eslint-disable-next-line no-restricted-imports
 import { noop } from "lodash";
-import { useRouter } from "next/router";
-import { useMemo } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { getUserAvatarUrl } from "@calcom/lib/getAvatarUrl";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
+import { defaultLocaleOption, localeOptions } from "@calcom/lib/i18n";
 import { nameOfDay } from "@calcom/lib/weekday";
-import { Button, EmailField, Form, Label, Select, TextField, TimezoneSelect } from "@calcom/ui";
+import {
+  Avatar,
+  Button,
+  EmailField,
+  Form,
+  ImageUploader,
+  Label,
+  Select,
+  TextField,
+  TimezoneSelect,
+} from "@calcom/ui";
 
 import type { UserAdminRouterOutputs } from "../server/trpc-router";
 
@@ -25,7 +36,7 @@ type OptionValues = {
   identityProvider: Option;
 };
 
-type FormValues = Pick<User, "avatar" | "name" | "username" | "email" | "bio"> & OptionValues;
+type FormValues = Pick<User, "avatarUrl" | "name" | "username" | "email" | "bio"> & OptionValues;
 
 export const UserForm = ({
   defaultValues,
@@ -38,15 +49,7 @@ export const UserForm = ({
   onSubmit: (data: FormValues) => void;
   submitLabel?: string;
 }) => {
-  const router = useRouter();
   const { t } = useLocale();
-
-  const localeOptions = useMemo(() => {
-    return (router.locales || []).map((locale) => ({
-      value: locale,
-      label: new Intl.DisplayNames(locale, { type: "language" }).of(locale) || "",
-    }));
-  }, [router.locales]);
 
   const timeFormatOptions = [
     { value: 12, label: t("12_hour") },
@@ -73,17 +76,18 @@ export const UserForm = ({
     { value: "GOOGLE", label: "GOOGLE" },
     { value: "SAML", label: "SAML" },
   ];
+  const defaultLocale = defaultValues?.locale || defaultLocaleOption.value;
 
   const form = useForm<FormValues>({
     defaultValues: {
-      avatar: defaultValues?.avatar,
+      avatarUrl: defaultValues?.avatarUrl,
       name: defaultValues?.name,
       username: defaultValues?.username,
       email: defaultValues?.email,
       bio: defaultValues?.bio,
       locale: {
-        value: defaultValues?.locale || localeOptions[0].value,
-        label: localeOptions.find((option) => option.value === localeProp)?.label || "",
+        value: defaultLocale,
+        label: new Intl.DisplayNames(defaultLocale, { type: "language" }).of(defaultLocale) || "",
       },
       timeFormat: {
         value: defaultValues?.timeFormat || 12,
@@ -92,7 +96,9 @@ export const UserForm = ({
       timeZone: defaultValues?.timeZone || "",
       weekStart: {
         value: defaultValues?.weekStart || weekStartOptions[0].value,
-        label: nameOfDay(localeProp, defaultValues?.weekStart === "Sunday" ? 0 : 1),
+        label:
+          weekStartOptions.find((option) => option.value === defaultValues?.weekStart)?.label ||
+          weekStartOptions[0].label,
       },
       role: {
         value: defaultValues?.role || userRoleOptions[0].value,
@@ -103,7 +109,7 @@ export const UserForm = ({
       identityProvider: {
         value: defaultValues?.identityProvider || identityProviderOptions[0].value,
         label:
-          identityProviderOptions.find((option) => option.value === defaultValues?.role)?.label ||
+          identityProviderOptions.find((option) => option.value === defaultValues?.identityProvider)?.label ||
           identityProviderOptions[0].label,
       },
     },
@@ -111,29 +117,34 @@ export const UserForm = ({
 
   return (
     <Form form={form} className="space-y-4" handleSubmit={onSubmit}>
-      {/* TODO: Enable Avatar uploader in a follow up */}
-      {/*  <div className="flex items-center">
+      <div className="flex items-center">
         <Controller
           control={form.control}
-          name="avatar"
-          render={({ field: { value } }) => (
+          name="avatarUrl"
+          render={({ field: { value, onChange } }) => (
             <>
-              <Avatar alt="" imageSrc={value} gravatarFallbackMd5="fallback" size="lg" />
+              <Avatar
+                alt={form.getValues("name") || ""}
+                imageSrc={getUserAvatarUrl({
+                  avatarUrl: value,
+                })}
+                size="lg"
+              />
               <div className="ml-4">
                 <ImageUploader
                   target="avatar"
                   id="avatar-upload"
                   buttonMsg="Change avatar"
-                  handleAvatarChange={(newAvatar) => {
-                    form.setValue("avatar", newAvatar, { shouldDirty: true });
-                  }}
-                  imageSrc={value || undefined}
+                  handleAvatarChange={onChange}
+                  imageSrc={getUserAvatarUrl({
+                    avatarUrl: value,
+                  })}
                 />
               </div>
             </>
           )}
         />
-      </div> */}
+      </div>
       <Controller
         name="role"
         control={form.control}

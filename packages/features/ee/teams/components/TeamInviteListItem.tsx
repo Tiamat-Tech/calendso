@@ -7,40 +7,43 @@ import {
   Avatar,
   Button,
   Dropdown,
+  DropdownItem,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownItem,
   DropdownMenuTrigger,
+  showToast,
 } from "@calcom/ui";
-import { Ban, Check, MoreHorizontal, X } from "@calcom/ui/components/icon";
 
 interface Props {
   team: {
     id?: number;
     name?: string | null;
     slug?: string | null;
-    logo?: string | null;
     bio?: string | null;
+    logoUrl?: string | null;
     hideBranding?: boolean | undefined;
     role: MembershipRole;
     accepted: boolean;
   };
   key: number;
   onActionSelect: (text: string) => void;
-  isLoading?: boolean;
+  isPending?: boolean;
   hideDropdown: boolean;
   setHideDropdown: (value: boolean) => void;
 }
 
 export default function TeamInviteListItem(props: Props) {
   const { t } = useLocale();
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
   const team = props.team;
 
   const acceptOrLeaveMutation = trpc.viewer.teams.acceptOrLeave.useMutation({
     onSuccess: async () => {
+      showToast(t("success"), "success");
       await utils.viewer.teams.get.invalidate();
+      await utils.viewer.teams.hasTeamPlan.invalidate();
       await utils.viewer.teams.list.invalidate();
+      await utils.viewer.organizations.listMembers.invalidate();
     },
   });
 
@@ -62,7 +65,7 @@ export default function TeamInviteListItem(props: Props) {
     <div className="flex">
       <Avatar
         size="mdLg"
-        imageSrc={getPlaceholderAvatar(team?.logo, team?.name as string)}
+        imageSrc={getPlaceholderAvatar(team.logoUrl, team.name)}
         alt="Team Logo"
         className=""
       />
@@ -92,7 +95,7 @@ export default function TeamInviteListItem(props: Props) {
                 variant="icon"
                 color="secondary"
                 onClick={declineInvite}
-                StartIcon={Ban}
+                StartIcon="ban"
               />
               <Button
                 type="button"
@@ -100,22 +103,22 @@ export default function TeamInviteListItem(props: Props) {
                 variant="icon"
                 color="secondary"
                 onClick={acceptInvite}
-                StartIcon={Check}
+                StartIcon="check"
               />
             </div>
             <div className="block sm:hidden">
               <Dropdown>
                 <DropdownMenuTrigger asChild>
-                  <Button type="button" color="minimal" variant="icon" StartIcon={MoreHorizontal} />
+                  <Button type="button" color="minimal" variant="icon" StartIcon="ellipsis" />
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem>
-                    <DropdownItem type="button" StartIcon={Check} onClick={acceptInvite}>
+                    <DropdownItem type="button" StartIcon="check" onClick={acceptInvite}>
                       {t("accept")}
                     </DropdownItem>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
-                    <DropdownItem color="destructive" type="button" StartIcon={X} onClick={declineInvite}>
+                    <DropdownItem color="destructive" type="button" StartIcon="x" onClick={declineInvite}>
                       {t("reject")}
                     </DropdownItem>
                   </DropdownMenuItem>

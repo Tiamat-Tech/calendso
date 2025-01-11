@@ -13,18 +13,31 @@ export const getScheduleSchema = z
     // invitee timezone
     timeZone: z.string().optional(),
     // or list of users (for dynamic events)
-    usernameList: z.union([z.string(), z.array(z.string())]).optional(),
+    usernameList: z.array(z.string()).min(1).optional(),
     debug: z.boolean().optional(),
     // to handle event types with multiple duration options
     duration: z
       .string()
       .optional()
       .transform((val) => val && parseInt(val)),
+    rescheduleUid: z.string().nullish(),
+    // whether to do team event or user event
+    isTeamEvent: z.boolean().optional().default(false),
+    orgSlug: z.string().nullish(),
+    teamMemberEmail: z.string().nullish(),
+    routedTeamMemberIds: z.array(z.number()).nullish(),
+    skipContactOwner: z.boolean().nullish(),
+    _enableTroubleshooter: z.boolean().optional(),
+    _bypassCalendarBusyTimes: z.boolean().optional(),
+    _shouldServeCache: z.boolean().optional(),
   })
   .transform((val) => {
     // Need this so we can pass a single username in the query string form public API
     if (val.usernameList) {
       val.usernameList = Array.isArray(val.usernameList) ? val.usernameList : [val.usernameList];
+    }
+    if (!val.orgSlug) {
+      val.orgSlug = null;
     }
     return val;
   })
@@ -54,3 +67,7 @@ export type Slot = {
   bookingUid?: string;
   users?: string[];
 };
+
+export const removeSelectedSlotSchema = z.object({
+  uid: z.string().nullable(),
+});

@@ -1,12 +1,12 @@
-import DOMPurify from "dompurify";
+"use client";
+
 import { useSession } from "next-auth/react";
 import type { AriaRole, ComponentType } from "react";
-import React, { Fragment } from "react";
+import React, { Fragment, useEffect } from "react";
 
-import { APP_NAME, CONSOLE_URL, SUPPORT_MAIL_ADDRESS, WEBAPP_URL } from "@calcom/lib/constants";
+import { WEBAPP_URL } from "@calcom/lib/constants";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import { EmptyScreen } from "@calcom/ui";
-import { AlertTriangle } from "@calcom/ui/components/icon";
+import { EmptyScreen, Alert, Button } from "@calcom/ui";
 
 type LicenseRequiredProps = {
   as?: keyof JSX.IntrinsicElements | "";
@@ -21,30 +21,46 @@ const LicenseRequired = ({ children, as = "", ...rest }: LicenseRequiredProps) =
   const Component = as || Fragment;
   const hasValidLicense = session.data ? session.data.hasValidLicense : null;
 
+  useEffect(() => {
+    if (process.env.NODE_ENV === "development" && hasValidLicense === false) {
+      // Very few people will see this, so we don't need to translate it
+      console.info(
+        `You're using a feature that requires a valid license. Please go to ${WEBAPP_URL}/auth/setup to enter a license key.`
+      );
+    }
+  }, []);
+
   return (
     <Component {...rest}>
       {hasValidLicense === null || hasValidLicense ? (
         children
+      ) : process.env.NODE_ENV === "development" ? (
+        /** We only show a warning in development mode, but allow the feature to be displayed for development/testing purposes */
+        <>
+          <Alert
+            className="mb-4"
+            severity="warning"
+            title={
+              <>
+                {t("enterprise_license_locally")} {t("enterprise_license_sales")}{" "}
+                <a className="underline" href="https://go.cal.com/get-license">
+                  {t("contact_sales")}
+                </a>
+              </>
+            }
+          />
+          {children}
+        </>
       ) : (
         <EmptyScreen
-          Icon={AlertTriangle}
+          Icon="triangle-alert"
           headline={t("enterprise_license")}
-          description={
-            <div
-              dangerouslySetInnerHTML={{
-                __html: DOMPurify.sanitize(
-                  t("enterprise_license_description", {
-                    consoleUrl: `<a href="${CONSOLE_URL}" target="_blank" rel="noopener noreferrer" class="underline">
-                ${APP_NAME}
-              </a>`,
-                    setupUrl: `<a href="${WEBAPP_URL}/auth/setup" class="underline">/auth/setup</a>`,
-                    supportMail: `<a href="mailto:${SUPPORT_MAIL_ADDRESS}" class="underline">
-                ${SUPPORT_MAIL_ADDRESS}</a>`,
-                  })
-                ),
-              }}
-            />
+          buttonRaw={
+            <Button color="secondary" href="https://go.cal.com/get-license">
+              {t(`contact_sales`)}
+            </Button>
           }
+          description={t("enterprise_license_sales")}
         />
       )}
     </Component>
@@ -56,9 +72,11 @@ export const withLicenseRequired =
   // eslint-disable-next-line react/display-name
   (hocProps: T) =>
     (
-      <LicenseRequired>
-        <Component {...hocProps} />
-      </LicenseRequired>
+      <div>
+        <LicenseRequired>
+          <Component {...hocProps} />
+        </LicenseRequired>
+      </div>
     );
 
 export default LicenseRequired;

@@ -44,7 +44,7 @@ export default class ExchangeCalendarService implements Calendar {
     // this.integrationName = CALENDAR_INTEGRATIONS_TYPES.exchange;
     this.integrationName = "exchange2016_calendar";
 
-    this.log = logger.getChildLogger({ prefix: [`[[lib] ${this.integrationName}`] });
+    this.log = logger.getSubLogger({ prefix: [`[[lib] ${this.integrationName}`] });
 
     const decryptedCredential = JSON.parse(
       symmetricDecrypt(credential.key?.toString() || "", process.env.CALENDSO_ENCRYPTION_KEY || "")
@@ -193,7 +193,6 @@ export default class ExchangeCalendarService implements Calendar {
   }
 
   async listCalendars(): Promise<IntegrationCalendar[]> {
-    console.log("This triggers");
     try {
       const allFolders: IntegrationCalendar[] = [];
       return this.getExchangeService()
@@ -226,7 +225,7 @@ export default class ExchangeCalendarService implements Calendar {
             }
           }
           return allFolders;
-        });
+        }) as Promise<IntegrationCalendar[]>;
     } catch (reason) {
       this.log.error(reason);
       throw reason;
