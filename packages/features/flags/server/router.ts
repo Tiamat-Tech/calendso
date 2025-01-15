@@ -1,30 +1,15 @@
-import { z } from "zod";
-
-import { authedAdminProcedure } from "@calcom/trpc/server/procedures/authedProcedure";
 import publicProcedure from "@calcom/trpc/server/procedures/publicProcedure";
 import { router } from "@calcom/trpc/server/trpc";
 
-import { getFeatureFlagMap } from "./utils";
+import { map } from "./procedures/map";
 
 export const featureFlagRouter = router({
   list: publicProcedure.query(async ({ ctx }) => {
     const { prisma } = ctx;
     return prisma.feature.findMany({
       orderBy: { slug: "asc" },
+      cacheStrategy: { swr: 300, ttl: 300 },
     });
   }),
-  map: publicProcedure.query(async ({ ctx }) => {
-    const { prisma } = ctx;
-    return getFeatureFlagMap(prisma);
-  }),
-  toggle: authedAdminProcedure
-    .input(z.object({ slug: z.string(), enabled: z.boolean() }))
-    .mutation(({ ctx, input }) => {
-      const { prisma, user } = ctx;
-      const { slug, enabled } = input;
-      return prisma.feature.update({
-        where: { slug },
-        data: { enabled, updatedBy: user.id },
-      });
-    }),
+  map,
 });

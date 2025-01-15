@@ -1,17 +1,16 @@
-import { useRouter } from "next/router";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { Dispatch, SetStateAction } from "react";
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 import type { UseFormReturn } from "react-hook-form";
 import { Controller } from "react-hook-form";
 
 import { SENDER_ID, SENDER_NAME } from "@calcom/lib/constants";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import { WorkflowTemplates } from "@calcom/prisma/enums";
 import type { WorkflowActions } from "@calcom/prisma/enums";
-import { trpc } from "@calcom/trpc/react";
+import { WorkflowTemplates } from "@calcom/prisma/enums";
+import type { RouterOutputs } from "@calcom/trpc/react";
 import type { MultiSelectCheckboxesOptionType as Option } from "@calcom/ui";
-import { Button, Label, MultiSelectCheckboxes, TextField } from "@calcom/ui";
-import { ArrowDown, Trash2 } from "@calcom/ui/components/icon";
+import { Button, Icon, Label, MultiSelectCheckboxes, TextField, CheckboxField, InfoBadge } from "@calcom/ui";
 
 import { isSMSAction } from "../lib/actionHelperFunctions";
 import type { FormValues } from "../pages/workflow";
@@ -19,56 +18,42 @@ import { AddActionDialog } from "./AddActionDialog";
 import { DeleteDialog } from "./DeleteDialog";
 import WorkflowStepContainer from "./WorkflowStepContainer";
 
+type User = RouterOutputs["viewer"]["me"];
+
 interface Props {
   form: UseFormReturn<FormValues>;
   workflowId: number;
-  selectedEventTypes: Option[];
-  setSelectedEventTypes: Dispatch<SetStateAction<Option[]>>;
+  selectedOptions: Option[];
+  setSelectedOptions: Dispatch<SetStateAction<Option[]>>;
   teamId?: number;
-  isMixedEventType: boolean;
+  user: User;
   readOnly: boolean;
+  isOrg: boolean;
+  allOptions: Option[];
 }
 
 export default function WorkflowDetailsPage(props: Props) {
-  const { form, workflowId, selectedEventTypes, setSelectedEventTypes, teamId, isMixedEventType } = props;
+  const { form, workflowId, selectedOptions, setSelectedOptions, teamId, isOrg, allOptions } = props;
   const { t } = useLocale();
   const router = useRouter();
 
   const [isAddActionDialogOpen, setIsAddActionDialogOpen] = useState(false);
+
   const [reload, setReload] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const { data, isLoading } = trpc.viewer.eventTypes.getByViewer.useQuery();
+  const searchParams = useSearchParams();
+  const eventTypeId = searchParams?.get("eventTypeId");
 
-  const eventTypeOptions = useMemo(
-    () =>
-      data?.eventTypeGroups.reduce((options, group) => {
-        /** don't show team event types for user workflow */
-        if (!teamId && group.teamId) return options;
-        /** only show correct team event types for team workflows */
-        if (teamId && teamId !== group.teamId) return options;
-        return [
-          ...options,
-          ...group.eventTypes.map((eventType) => ({
-            value: String(eventType.id),
-            label: `${eventType.title} ${eventType.children.length ? `(+${eventType.children.length})` : ``}`,
-          })),
-        ];
-      }, [] as Option[]) || [],
-    [data]
-  );
-
-  let allEventTypeOptions = eventTypeOptions;
-  const distinctEventTypes = new Set();
-
-  if (!teamId && isMixedEventType) {
-    allEventTypeOptions = [...eventTypeOptions, ...selectedEventTypes];
-    allEventTypeOptions = allEventTypeOptions.filter((option) => {
-      const duplicate = distinctEventTypes.has(option.value);
-      distinctEventTypes.add(option.value);
-      return !duplicate;
-    });
-  }
+  useEffect(() => {
+    const matchingOption = allOptions.find((option) => option.value === eventTypeId);
+    if (matchingOption && !selectedOptions.find((option) => option.value === eventTypeId)) {
+      const newOptions = [...selectedOptions, matchingOption];
+      setSelectedOptions(newOptions);
+      form.setValue("activeOn", newOptions);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventTypeId]);
 
   const addAction = (
     action: WorkflowActions,
@@ -98,11 +83,12 @@ export default function WorkflowDetailsPage(props: Props) {
       workflowId: workflowId,
       reminderBody: null,
       emailSubject: null,
-      template: WorkflowTemplates.CUSTOM,
+      template: WorkflowTemplates.REMINDER,
       numberRequired: numberRequired || false,
       sender: isSMSAction(action) ? sender || SENDER_ID : SENDER_ID,
       senderName: !isSMSAction(action) ? senderName || SENDER_NAME : SENDER_NAME,
       numberVerificationPending: false,
+      includeCalendarEvent: false,
     };
     steps?.push(step);
     form.setValue("steps", steps);
@@ -110,41 +96,70 @@ export default function WorkflowDetailsPage(props: Props) {
 
   return (
     <>
-      <div className="my-8 sm:my-0 md:flex">
+      <div className="z-1 my-8 sm:my-0 md:flex">
         <div className="pl-2 pr-3 md:sticky md:top-6 md:h-0 md:pl-0">
           <div className="mb-5">
             <TextField
+              data-testid="workflow-name"
               disabled={props.readOnly}
               label={`${t("workflow_name")}:`}
               type="text"
               {...form.register("name")}
             />
           </div>
-          <Label>{t("which_event_type_apply")}</Label>
+          {isOrg ? (
+            <div className="flex">
+              <Label>{t("which_team_apply")}</Label>
+              <div className="-mt-0.5">
+                <InfoBadge content={t("team_select_info")} />
+              </div>
+            </div>
+          ) : (
+            <Label>{t("which_event_type_apply")}</Label>
+          )}
           <Controller
             name="activeOn"
             control={form.control}
             render={() => {
               return (
                 <MultiSelectCheckboxes
-                  options={allEventTypeOptions}
-                  isDisabled={props.readOnly}
-                  isLoading={isLoading}
+                  options={allOptions}
+                  isDisabled={props.readOnly || form.getValues("selectAll")}
                   className="w-full md:w-64"
-                  setSelected={setSelectedEventTypes}
-                  selected={selectedEventTypes}
+                  setSelected={setSelectedOptions}
+                  selected={form.getValues("selectAll") ? allOptions : selectedOptions}
                   setValue={(s: Option[]) => {
                     form.setValue("activeOn", s);
                   }}
+                  countText={isOrg ? "count_team" : "nr_event_type"}
                 />
               );
             }}
           />
+          <div className="mt-3">
+            <Controller
+              name="selectAll"
+              render={({ field: { value, onChange } }) => (
+                <CheckboxField
+                  description={isOrg ? t("apply_to_all_teams") : t("apply_to_all_event_types")}
+                  disabled={props.readOnly}
+                  onChange={(e) => {
+                    onChange(e);
+                    if (e.target.value) {
+                      setSelectedOptions(allOptions);
+                      form.setValue("activeOn", allOptions);
+                    }
+                  }}
+                  checked={value}
+                />
+              )}
+            />
+          </div>
           <div className="md:border-subtle my-7 border-transparent md:border-t" />
           {!props.readOnly && (
             <Button
               type="button"
-              StartIcon={Trash2}
+              StartIcon="trash-2"
               color="destructive"
               className="border"
               onClick={() => setDeleteDialogOpen(true)}>
@@ -158,7 +173,12 @@ export default function WorkflowDetailsPage(props: Props) {
         <div className="bg-muted border-subtle w-full rounded-md border p-3 py-5 md:ml-3 md:p-8">
           {form.getValues("trigger") && (
             <div>
-              <WorkflowStepContainer form={form} teamId={teamId} readOnly={props.readOnly} />
+              <WorkflowStepContainer
+                form={form}
+                user={props.user}
+                teamId={teamId}
+                readOnly={props.readOnly}
+              />
             </div>
           )}
           {form.getValues("steps") && (
@@ -168,6 +188,7 @@ export default function WorkflowDetailsPage(props: Props) {
                   <WorkflowStepContainer
                     key={step.id}
                     form={form}
+                    user={props.user}
                     step={step}
                     reload={reload}
                     setReload={setReload}
@@ -181,7 +202,7 @@ export default function WorkflowDetailsPage(props: Props) {
           {!props.readOnly && (
             <>
               <div className="my-3 flex justify-center">
-                <ArrowDown className="text-subtle stroke-[1.5px] text-3xl" />
+                <Icon name="arrow-down" className="text-subtle stroke-[1.5px] text-3xl" />
               </div>
               <div className="flex justify-center">
                 <Button
@@ -205,7 +226,7 @@ export default function WorkflowDetailsPage(props: Props) {
         isOpenDialog={deleteDialogOpen}
         setIsOpenDialog={setDeleteDialogOpen}
         workflowId={workflowId}
-        additionalFunction={async () => await router.push("/workflows")}
+        additionalFunction={async () => router.push("/workflows")}
       />
     </>
   );

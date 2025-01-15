@@ -12,6 +12,7 @@ export const hasTeamPlanHandler = async ({ ctx }: HasTeamPlanOptions) => {
 
   const hasTeamPlan = await prisma.membership.findFirst({
     where: {
+      accepted: true,
       userId,
       team: {
         slug: {
@@ -22,3 +23,5 @@ export const hasTeamPlanHandler = async ({ ctx }: HasTeamPlanOptions) => {
   });
   return { hasTeamPlan: !!hasTeamPlan };
 };
+
+export default hasTeamPlanHandler;

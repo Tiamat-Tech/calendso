@@ -6,9 +6,9 @@ export const metadata = {
   name: "Vital",
   description: _package.description,
   installed: true,
-  category: "other",
-  categories: ["other"],
-  logo: "icon.svg",
+  category: "automation",
+  categories: ["automation"],
+  logo: "icon-dark.svg",
   label: "Vital",
   publisher: "Vital",
   slug: "vital-automation",
@@ -18,6 +18,7 @@ export const metadata = {
   variant: "other",
   email: "support@tryvital.io",
   dirName: "vital",
+  isOAuth: true,
 } as AppMeta;
 
 export default metadata;

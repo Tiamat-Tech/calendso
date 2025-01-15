@@ -6,7 +6,7 @@
   "logo": "icon-dark.svg",
   "url": "https://cal.com/",
   "variant": "conferencing",
-  "categories": ["video"],
+  "categories": ["conferencing"],
   "publisher": "Cal.com, Inc.",
   "email": "support@cal.com",
   "description": "Video meetings made for music.\rCreate your own virtual music classroom, easily.",
@@ -19,5 +19,6 @@
       "organizerInputPlaceholder": "https://sirius.video/sebastian",
       "urlRegExp": "^http(s)?:\\/\\/(www\\.)?sirius.video\\/[a-zA-Z0-9]*"
     }
-  }
+  },
+  "isOAuth": false
 }

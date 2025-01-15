@@ -9,10 +9,10 @@ export const metadata = {
   type: "daily_video",
   variant: "conferencing",
   url: "https://daily.co",
-  categories: ["video"],
+  categories: ["conferencing"],
   logo: "icon.svg",
   publisher: "Cal.com",
-  category: "video",
+  category: "conferencing",
   slug: "daily-video",
   title: "Cal Video",
   isGlobal: true,
@@ -26,6 +26,7 @@ export const metadata = {
   },
   key: { apikey: process.env.DAILY_API_KEY },
   dirName: "dailyvideo",
+  isOAuth: false,
 } as AppMeta;
 
 export default metadata;

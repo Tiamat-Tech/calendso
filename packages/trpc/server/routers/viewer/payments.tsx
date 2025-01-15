@@ -3,8 +3,13 @@ import { z } from "zod";
 import appStore from "@calcom/app-store";
 import dayjs from "@calcom/dayjs";
 import { sendNoShowFeeChargedEmail } from "@calcom/emails";
+import { WebhookService } from "@calcom/features/webhooks/lib/WebhookService";
+import getOrgIdFromMemberOrTeamId from "@calcom/lib/getOrgIdFromMemberOrTeamId";
 import { getTranslation } from "@calcom/lib/server/i18n";
+import { WebhookTriggerEvents } from "@calcom/prisma/enums";
+import type { EventTypeMetadata } from "@calcom/prisma/zod-utils";
 import type { CalendarEvent } from "@calcom/types/Calendar";
+import type { PaymentApp } from "@calcom/types/PaymentService";
 
 import { TRPCError } from "@trpc/server";
 
@@ -21,23 +26,28 @@ export const paymentsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const { prisma } = ctx;
 
-      const booking = await prisma.booking.findFirst({
+      const booking = await prisma.booking.findFirstOrThrow({
         where: {
           id: input.bookingId,
         },
         include: {
           payment: true,
-          user: true,
+          user: {
+            select: {
+              email: true,
+              locale: true,
+              name: true,
+              timeZone: true,
+            },
+          },
           attendees: true,
           eventType: true,
         },
       });
 
-      if (!booking) {
-        throw new Error("Booking not found");
-      }
+      const payment = booking.payment[0];
 
-      if (booking.payment[0].success) {
+      if (payment.success) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: `The no show fee for ${booking.id} has already been charged.`,
@@ -65,7 +75,7 @@ export const paymentsRouter = router({
       const attendeesList = await Promise.all(attendeesListPromises);
 
       const evt: CalendarEvent = {
-        type: (booking?.eventType?.title as string) || booking?.title,
+        type: booking?.eventType?.slug as string,
         title: booking.title,
         startTime: dayjs(booking.startTime).format(),
         endTime: dayjs(booking.endTime).format(),
@@ -77,16 +87,16 @@ export const paymentsRouter = router({
         },
         attendees: attendeesList,
         paymentInfo: {
-          amount: booking.payment[0].amount,
-          currency: booking.payment[0].currency,
-          paymentOption: booking.payment[0].paymentOption,
+          amount: payment.amount,
+          currency: payment.currency,
+          paymentOption: payment.paymentOption,
         },
       };
 
       const paymentCredential = await prisma.credential.findFirst({
         where: {
           userId: ctx.user.id,
-          appId: booking.payment[0].appId,
+          appId: payment.appId,
         },
         include: {
           app: true,
@@ -97,9 +107,11 @@ export const paymentsRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid payment credential" });
       }
 
-      const paymentApp = await appStore[paymentCredential?.app?.dirName as keyof typeof appStore];
+      const paymentApp = (await appStore[
+        paymentCredential?.app?.dirName as keyof typeof appStore
+      ]?.()) as PaymentApp | null;
 
-      if (!("lib" in paymentApp && "PaymentService" in paymentApp.lib)) {
+      if (!(paymentApp && paymentApp.lib && "lib" in paymentApp && "PaymentService" in paymentApp.lib)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Payment service not found" });
       }
 
@@ -107,13 +119,34 @@ export const paymentsRouter = router({
       const paymentInstance = new PaymentService(paymentCredential);
 
       try {
-        const paymentData = await paymentInstance.chargeCard(booking.payment[0]);
+        const paymentData = await paymentInstance.chargeCard(payment);
 
         if (!paymentData) {
           throw new TRPCError({ code: "NOT_FOUND", message: `Could not generate payment data` });
         }
 
-        await sendNoShowFeeChargedEmail(attendeesListPromises[0], evt);
+        const userId = ctx.user.id || 0;
+        const orgId = await getOrgIdFromMemberOrTeamId({ memberId: userId });
+        const eventTypeId = booking.eventTypeId || 0;
+        const webhooks = await new WebhookService({
+          userId,
+          eventTypeId,
+          triggerEvent: WebhookTriggerEvents.BOOKING_PAID,
+          orgId,
+        });
+        await webhooks.sendPayload({
+          ...evt,
+          bookingId: booking.id,
+          paymentId: payment.id,
+          paymentData,
+          eventTypeId,
+        });
+
+        await sendNoShowFeeChargedEmail(
+          attendeesListPromises[0],
+          evt,
+          booking?.eventType?.metadata as EventTypeMetadata
+        );
 
         return paymentData;
       } catch (err) {

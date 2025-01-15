@@ -6,7 +6,7 @@
   "logo": "icon.svg",
   "url": "https://cal.com/",
   "variant": "conferencing",
-  "categories": ["video"],
+  "categories": ["conferencing"],
   "publisher": "Cal.com, Inc.",
   "email": "support@cal.com",
   "appData": {
@@ -22,5 +22,6 @@
   "isTemplate": false,
   "__createdUsingCli": true,
   "__template": "event-type-location-video-static",
-  "dirName": "mirotalk"
+  "dirName": "mirotalk",
+  "isOAuth": false
 }

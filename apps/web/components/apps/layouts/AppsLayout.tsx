@@ -1,12 +1,11 @@
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
 import React from "react";
 
 import Shell from "@calcom/features/shell/Shell";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { EmptyScreen } from "@calcom/ui";
-import { AlertCircle } from "@calcom/ui/components/icon";
 
 type AppsLayoutProps = {
   children: React.ReactNode;
@@ -27,9 +26,9 @@ export default function AppsLayout({ children, actions, emptyStore, ...rest }: A
         <main className="w-full">
           {emptyStore ? (
             <EmptyScreen
-              Icon={AlertCircle}
-              headline={t("no_apps")}
-              description={isAdmin ? "You can enable apps in the settings" : ""}
+              Icon="circle-alert"
+              headline={isAdmin ? t("no_apps") : t("no_apps_configured")}
+              description={isAdmin ? t("enable_in_settings") : t("please_contact_admin")}
               buttonText={isAdmin ? t("apps_settings") : ""}
               buttonOnClick={() => router.push("/settings/admin/apps/calendar")}
             />
@@ -41,4 +40,3 @@ export default function AppsLayout({ children, actions, emptyStore, ...rest }: A
     </Shell>
   );
 }
-export const getLayout = (page: React.ReactElement) => <AppsLayout>{page}</AppsLayout>;

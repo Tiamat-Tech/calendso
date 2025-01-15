@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 
+import { orgDomainConfig } from "@calcom/features/ee/organizations/lib/orgDomains";
 import {
   ANDROID_CHROME_ICON_192,
   ANDROID_CHROME_ICON_256,
@@ -15,7 +16,7 @@ import {
 } from "@calcom/lib/constants";
 import logger from "@calcom/lib/logger";
 
-const log = logger.getChildLogger({ prefix: ["[api/logo]"] });
+const log = logger.getSubLogger({ prefix: ["[api/logo]"] });
 
 function removePort(url: string) {
   return url.replace(/:\d+$/, "");
@@ -104,7 +105,7 @@ function isValidLogoType(type: string): type is LogoType {
   return type in logoDefinitions;
 }
 
-async function getTeamLogos(subdomain: string) {
+async function getTeamLogos(subdomain: string, isValidOrgDomain: boolean) {
   try {
     if (
       // if not cal.com
@@ -118,9 +119,15 @@ async function getTeamLogos(subdomain: string) {
     }
     // load from DB
     const { default: prisma } = await import("@calcom/prisma");
-    const team = await prisma.team.findUnique({
+    const team = await prisma.team.findFirst({
       where: {
         slug: subdomain,
+        ...(isValidOrgDomain && {
+          metadata: {
+            path: ["isOrganization"],
+            equals: true,
+          },
+        }),
       },
       select: {
         appLogo: true,
@@ -147,6 +154,7 @@ async function getTeamLogos(subdomain: string) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { query } = req;
   const parsedQuery = logoApiSchema.parse(query);
+  const { isValidOrgDomain } = orgDomainConfig(req);
 
   const hostname = req?.headers["host"];
   if (!hostname) throw new Error("No hostname");
@@ -154,7 +162,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!domains) throw new Error("No domains");
 
   const [subdomain] = domains;
-  const teamLogos = await getTeamLogos(subdomain);
+  const teamLogos = await getTeamLogos(subdomain, isValidOrgDomain);
 
   // Resolve all icon types to team logos, falling back to Cal.com defaults.
   const type: LogoType = parsedQuery?.type && isValidLogoType(parsedQuery.type) ? parsedQuery.type : "logo";
@@ -179,7 +187,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     res.setHeader("Content-Type", response.headers.get("content-type") as string);
-    res.setHeader("Cache-Control", "s-maxage=86400");
+    res.setHeader("Cache-Control", "s-maxage=86400, stale-while-revalidate=60");
     res.send(buffer);
   } catch (error) {
     res.statusCode = 404;

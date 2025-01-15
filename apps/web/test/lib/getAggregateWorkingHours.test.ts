@@ -1,9 +1,10 @@
-import MockDate from "mockdate";
-import { expect, it } from "vitest";
+import { expect, it, beforeAll, vi } from "vitest";
 
 import { getAggregateWorkingHours } from "@calcom/core/getAggregateWorkingHours";
 
-MockDate.set("2021-06-20T11:59:59Z");
+beforeAll(() => {
+  vi.setSystemTime(new Date("2021-06-20T11:59:59Z"));
+});
 
 const HAWAII_AND_NEWYORK_TEAM = [
   {
@@ -11,6 +12,7 @@ const HAWAII_AND_NEWYORK_TEAM = [
     workingHours: [{ userId: 1, days: [1, 2, 3, 4, 5], startTime: 780, endTime: 1260 }],
     busy: [],
     dateOverrides: [],
+    datesOutOfOffice: {},
   },
   {
     timeZone: "Pacific/Honolulu", // GMT -10 per 22th of Aug, 2022
@@ -22,6 +24,7 @@ const HAWAII_AND_NEWYORK_TEAM = [
     ],
     busy: [],
     dateOverrides: [],
+    datesOutOfOffice: {},
   },
 ];
 

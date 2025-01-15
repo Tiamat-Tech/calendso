@@ -7,6 +7,7 @@ import { isPrismaObjOrUndefined, parseRecurringEvent } from "@calcom/lib";
 import { getTranslation } from "@calcom/lib/server/i18n";
 import prisma, { bookingMinimalSelect } from "@calcom/prisma";
 import { BookingStatus, ReminderType } from "@calcom/prisma/enums";
+import type { EventTypeMetadata } from "@calcom/prisma/zod-utils";
 import type { CalendarEvent } from "@calcom/types/Calendar";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -31,6 +32,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         // Only send reminders if the event hasn't finished
         endTime: { gte: new Date() },
+        OR: [
+          // no payment required
+          {
+            payment: { none: {} },
+          },
+          // paid but awaiting approval
+          {
+            payment: { some: {} },
+            paid: true,
+          },
+        ],
       },
       select: {
         ...bookingMinimalSelect,
@@ -50,6 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           select: {
             recurringEvent: true,
             bookingFields: true,
+            metadata: true,
           },
         },
         responses: true,
@@ -93,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
 
       const attendeesList = await Promise.all(attendeesListPromises);
-
+      const selectedDestinationCalendar = booking.destinationCalendar || user.destinationCalendar;
       const evt: CalendarEvent = {
         type: booking.title,
         title: booking.title,
@@ -108,7 +121,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         endTime: booking.endTime.toISOString(),
         organizer: {
           id: user.id,
-          email: user.email,
+          email: booking?.userPrimaryEmail ?? user.email,
           name,
           timeZone: user.timeZone,
           language: { translate: tOrganizer, locale: user.locale ?? "en" },
@@ -116,10 +129,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         attendees: attendeesList,
         uid: booking.uid,
         recurringEvent: parseRecurringEvent(booking.eventType?.recurringEvent),
-        destinationCalendar: booking.destinationCalendar || user.destinationCalendar,
+        destinationCalendar: selectedDestinationCalendar ? [selectedDestinationCalendar] : [],
       };
 
-      await sendOrganizerRequestReminderEmail(evt);
+      await sendOrganizerRequestReminderEmail(evt, booking?.eventType?.metadata as EventTypeMetadata);
 
       await prisma.reminderMail.create({
         data: {

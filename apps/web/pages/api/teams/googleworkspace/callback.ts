@@ -1,8 +1,9 @@
-import { google } from "googleapis";
+import { OAuth2Client } from "googleapis-common";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 
 import getAppKeysFromSlug from "@calcom/app-store/_utils/getAppKeysFromSlug";
+import { throwIfNotHaveAdminAccessToTeam } from "@calcom/app-store/_utils/throwIfNotHaveAdminAccessToTeam";
 import { getServerSession } from "@calcom/features/auth/lib/getServerSession";
 import { WEBAPP_URL } from "@calcom/lib/constants";
 import { getSafeRedirectUrl } from "@calcom/lib/getSafeRedirectUrl";
@@ -22,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { code, state } = req.query;
   const parsedState = stateSchema.parse(JSON.parse(state as string));
   const { teamId } = parsedState;
-
+  await throwIfNotHaveAdminAccessToTeam({ teamId: Number(teamId) ?? null, userId: session.user.id });
   if (code && typeof code !== "string") {
     res.status(400).json({ message: "`code` must be a string" });
     return;
@@ -35,8 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!client_secret || typeof client_secret !== "string")
     return res.status(400).json({ message: "Google client_secret missing." });
 
-  const redirect_uri = WEBAPP_URL + "/api/teams/googleworkspace/callback";
-  const oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uri);
+  const redirect_uri = `${WEBAPP_URL}/api/teams/googleworkspace/callback`;
+  const oAuth2Client = new OAuth2Client(client_id, client_secret, redirect_uri);
 
   if (!code) {
     throw new Error("No code provided");
@@ -53,11 +54,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   });
 
   if (!teamId) {
-    res.redirect(getSafeRedirectUrl(WEBAPP_URL + "/settings") ?? `${WEBAPP_URL}/teams`);
+    res.redirect(getSafeRedirectUrl(`${WEBAPP_URL}/settings`) ?? `${WEBAPP_URL}/teams`);
   }
 
   res.redirect(
-    getSafeRedirectUrl(WEBAPP_URL + `/settings/teams/${teamId}/members?inviteModal=true&bulk=true`) ??
+    getSafeRedirectUrl(`${WEBAPP_URL}/settings/teams/${teamId}/members?inviteModal=true&bulk=true`) ??
       `${WEBAPP_URL}/teams`
   );
 }

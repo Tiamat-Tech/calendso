@@ -1,6 +1,8 @@
+"use client";
+
 import { zodResolver } from "@hookform/resolvers/zod";
+// eslint-disable-next-line no-restricted-imports
 import { noop } from "lodash";
-import { useRouter } from "next/router";
 import type { FC } from "react";
 import { useReducer, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -8,7 +10,9 @@ import { z } from "zod";
 
 import AppCategoryNavigation from "@calcom/app-store/_components/AppCategoryNavigation";
 import { appKeysSchemas } from "@calcom/app-store/apps.keys-schemas.generated";
+import AppListCard from "@calcom/features/apps/components/AppListCard";
 import { classNames as cs } from "@calcom/lib";
+import { useCompatSearchParams } from "@calcom/lib/hooks/useCompatSearchParams";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { AppCategories } from "@calcom/prisma/enums";
 import type { RouterOutputs } from "@calcom/trpc/react";
@@ -22,17 +26,15 @@ import {
   DialogFooter,
   EmptyScreen,
   Form,
+  Icon,
   List,
   showToast,
   SkeletonButton,
   SkeletonContainer,
   SkeletonText,
-  TextField,
   Switch,
+  TextField,
 } from "@calcom/ui";
-import { AlertCircle, Edit } from "@calcom/ui/components/icon";
-
-import AppListCard from "../../../apps/web/components/AppListCard";
 
 type App = RouterOutputs["viewer"]["appsRouter"]["listLocal"][number];
 
@@ -46,7 +48,7 @@ const IntegrationContainer = ({
   handleModelOpen: (data: EditModalState) => void;
 }) => {
   const { t } = useLocale();
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
   const [disableDialog, setDisableDialog] = useState(false);
 
   const showKeyModal = (fromEnabled?: boolean) => {
@@ -92,7 +94,7 @@ const IntegrationContainer = ({
           <div className="flex items-center justify-self-end">
             {app.keys && (
               <Button color="secondary" className="mr-2" onClick={() => showKeyModal()}>
-                <Edit />
+                <Icon name="pencil" />
               </Button>
             )}
 
@@ -156,7 +158,7 @@ const AdminAppsList = ({
     <form
       {...rest}
       className={
-        classNames?.form ?? "max-w-80 bg-default mb-4 rounded-md px-0 pt-0 md:max-w-full md:px-8 md:pt-10"
+        classNames?.form ?? "bg-default mb-4 max-w-80 rounded-md px-0 pt-0 md:max-w-full md:px-8 md:pt-10"
       }
       onSubmit={(e) => {
         e.preventDefault();
@@ -186,7 +188,7 @@ const EditKeysModal: FC<{
   fromEnabled?: boolean;
   appName?: string;
 }> = (props) => {
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
   const { t } = useLocale();
   const { dirName, slug, type, isOpen, keys, handleModelClose, fromEnabled, appName } = props;
   const appKeySchema = appKeysSchemas[dirName as keyof typeof appKeysSchemas];
@@ -244,7 +246,7 @@ const EditKeysModal: FC<{
             ))}
           </Form>
         )}
-        <DialogFooter>
+        <DialogFooter showDivider className="mt-8">
           <DialogClose onClick={handleModelClose} />
           <Button form="edit-keys" type="submit">
             {t("save")}
@@ -265,13 +267,13 @@ interface EditModalState extends Pick<App, "keys"> {
 }
 
 const AdminAppsListContainer = () => {
+  const searchParams = useCompatSearchParams();
   const { t } = useLocale();
-  const router = useRouter();
-  const { category } = querySchema.parse(router.query);
+  const category = searchParams?.get("category") || AppCategories.calendar;
 
-  const { data: apps, isLoading } = trpc.viewer.appsRouter.listLocal.useQuery(
+  const { data: apps, isPending } = trpc.viewer.appsRouter.listLocal.useQuery(
     { category },
-    { enabled: router.isReady }
+    { enabled: searchParams !== null }
   );
 
   const [modalState, setModalState] = useReducer(
@@ -290,12 +292,12 @@ const AdminAppsListContainer = () => {
 
   const handleModelOpen = (data: EditModalState) => setModalState({ ...data });
 
-  if (isLoading) return <SkeletonLoader />;
+  if (isPending) return <SkeletonLoader />;
 
-  if (!apps) {
+  if (!apps || apps.length === 0) {
     return (
       <EmptyScreen
-        Icon={AlertCircle}
+        Icon="circle-alert"
         headline={t("no_available_apps")}
         description={t("no_available_apps_description")}
       />
@@ -314,16 +316,18 @@ const AdminAppsListContainer = () => {
           />
         ))}
       </List>
-      <EditKeysModal
-        keys={modalState.keys}
-        dirName={modalState.dirName}
-        handleModelClose={handleModelClose}
-        isOpen={modalState.isOpen === "editKeys"}
-        slug={modalState.slug}
-        type={modalState.type}
-        fromEnabled={modalState.fromEnabled}
-        appName={modalState.appName}
-      />
+      {modalState.isOpen === "editKeys" && (
+        <EditKeysModal
+          keys={modalState.keys}
+          dirName={modalState.dirName}
+          handleModelClose={handleModelClose}
+          isOpen={modalState.isOpen === "editKeys"}
+          slug={modalState.slug}
+          type={modalState.type}
+          fromEnabled={modalState.fromEnabled}
+          appName={modalState.appName}
+        />
+      )}
     </>
   );
 };
@@ -333,7 +337,7 @@ export default AdminAppsList;
 const SkeletonLoader = () => {
   return (
     <SkeletonContainer className="w-[30rem] pr-10">
-      <div className="mt-6 mb-8 space-y-6">
+      <div className="mb-8 mt-6 space-y-6">
         <SkeletonText className="h-8 w-full" />
         <SkeletonText className="h-8 w-full" />
         <SkeletonText className="h-8 w-full" />

@@ -2,9 +2,10 @@ import appStore from "@calcom/app-store";
 import dayjs from "@calcom/dayjs";
 import { sendNoShowFeeChargedEmail } from "@calcom/emails";
 import { getTranslation } from "@calcom/lib/server/i18n";
-import type { PrismaClient } from "@calcom/prisma/client";
+import type { PrismaClient } from "@calcom/prisma";
+import type { EventTypeMetadata } from "@calcom/prisma/zod-utils";
 import type { CalendarEvent } from "@calcom/types/Calendar";
-import type { IAbstractPaymentService } from "@calcom/types/PaymentService";
+import type { IAbstractPaymentService, PaymentApp } from "@calcom/types/PaymentService";
 
 import { TRPCError } from "@trpc/server";
 
@@ -67,7 +68,7 @@ export const chargeCardHandler = async ({ ctx, input }: ChargeCardHandlerOptions
     startTime: dayjs(booking.startTime).format(),
     endTime: dayjs(booking.endTime).format(),
     organizer: {
-      email: booking.user?.email || "",
+      email: booking?.userPrimaryEmail ?? booking.user?.email ?? "",
       name: booking.user?.name || "Nameless",
       timeZone: booking.user?.timeZone || "",
       language: { translate: tOrganizer, locale: booking.user?.locale ?? "en" },
@@ -80,9 +81,13 @@ export const chargeCardHandler = async ({ ctx, input }: ChargeCardHandlerOptions
     },
   };
 
+  const idToSearchObject = booking.eventType?.teamId
+    ? { teamId: booking.eventType.teamId }
+    : { userId: ctx.user.id };
+
   const paymentCredential = await prisma.credential.findFirst({
     where: {
-      userId: ctx.user.id,
+      ...idToSearchObject,
       appId: booking.payment[0].appId,
     },
     include: {
@@ -94,9 +99,11 @@ export const chargeCardHandler = async ({ ctx, input }: ChargeCardHandlerOptions
     throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid payment credential" });
   }
 
-  const paymentApp = await appStore[paymentCredential?.app?.dirName as keyof typeof appStore]();
+  const paymentApp = (await appStore[
+    paymentCredential?.app?.dirName as keyof typeof appStore
+  ]?.()) as PaymentApp;
 
-  if (!("lib" in paymentApp && "PaymentService" in paymentApp.lib)) {
+  if (!paymentApp?.lib?.PaymentService) {
     throw new TRPCError({ code: "BAD_REQUEST", message: "Payment service not found" });
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,7 +117,11 @@ export const chargeCardHandler = async ({ ctx, input }: ChargeCardHandlerOptions
       throw new TRPCError({ code: "NOT_FOUND", message: `Could not generate payment data` });
     }
 
-    await sendNoShowFeeChargedEmail(attendeesListPromises[0], evt);
+    await sendNoShowFeeChargedEmail(
+      attendeesListPromises[0],
+      evt,
+      booking?.eventType?.metadata as EventTypeMetadata
+    );
 
     return paymentData;
   } catch (err) {

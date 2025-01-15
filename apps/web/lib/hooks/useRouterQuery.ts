@@ -1,36 +1,28 @@
-import { useRouter } from "next/router";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback } from "react";
+
+import { useCompatSearchParams } from "@calcom/lib/hooks/useCompatSearchParams";
 
 export default function useRouterQuery<T extends string>(name: T) {
+  const searchParams = useCompatSearchParams();
+  const pathname = usePathname();
   const router = useRouter();
-  const existingQueryParams = router.asPath.split("?")[1];
 
-  const urlParams = new URLSearchParams(existingQueryParams);
-  const query: Record<string, string | string[]> = {};
-  // Following error is thrown by Typescript:
-  // 'Type 'URLSearchParams' can only be iterated through when using the '--downlevelIteration' flag or with a '--target' of 'es2015' or higher'
-  // We should change the target to higher ES2019 atleast maybe
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-expect-error
-  for (const [key, value] of urlParams) {
-    if (!query[key]) {
-      query[key] = value;
-    } else {
-      let queryValue = query[key];
-      if (queryValue instanceof Array) {
-        queryValue.push(value);
+  const setQuery = useCallback(
+    (newValue: string | number | null | undefined) => {
+      const _searchParams = new URLSearchParams(searchParams ?? undefined);
+      if (typeof newValue === "undefined") {
+        // when newValue is of type undefined, clear the search param.
+        _searchParams.delete(name);
       } else {
-        queryValue = query[key] = [queryValue];
-        queryValue.push(value);
+        _searchParams.set(name, newValue as string);
       }
-    }
-  }
+      router.replace(`${pathname}?${_searchParams.toString()}`);
+    },
+    [name, pathname, router, searchParams]
+  );
 
-  const setQuery = (newValue: string | number | null | undefined) => {
-    router.replace({ query: { ...router.query, [name]: newValue } }, undefined, { shallow: true });
-    router.replace({ query: { ...router.query, ...query, [name]: newValue } }, undefined, { shallow: true });
-  };
-
-  return { [name]: query[name], setQuery } as {
+  return { [name]: searchParams?.get(name), setQuery } as {
     [K in T]: string | undefined;
   } & { setQuery: typeof setQuery };
 }
