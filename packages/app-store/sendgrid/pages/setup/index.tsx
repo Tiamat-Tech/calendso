@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/router";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Toaster } from "react-hot-toast";
@@ -7,7 +7,6 @@ import z from "zod";
 
 import { useLocale } from "@calcom/lib/hooks/useLocale";
 import { Button, Form, showToast, TextField } from "@calcom/ui";
-import { Check, X } from "@calcom/ui/components/icon";
 
 const formSchema = z.object({
   api_key: z.string(),
@@ -37,7 +36,7 @@ export default function SendgridSetup() {
   return (
     <div className="bg-emphasis flex h-screen">
       <div className="bg-default m-auto rounded p-5 md:w-[520px] md:p-10">
-        <div className="flex flex-col space-y-5 md:flex-row md:space-y-0 md:space-x-5">
+        <div className="flex flex-col space-y-5 md:flex-row md:space-x-5 md:space-y-0">
           <div>
             <img src="/api/app-store/sendgrid/logo.png" alt="Sendgrid" className="h-12 w-12 max-w-2xl" />
           </div>
@@ -102,7 +101,7 @@ export default function SendgridSetup() {
                     type="submit"
                     loading={testLoading}
                     disabled={testPassed === true}
-                    StartIcon={testPassed !== undefined ? (testPassed ? Check : X) : undefined}
+                    StartIcon={testPassed === undefined ? undefined : testPassed ? "check" : "x"}
                     className={
                       testPassed !== undefined
                         ? testPassed

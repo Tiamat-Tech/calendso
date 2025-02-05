@@ -1,28 +1,41 @@
 import { useEffect } from "react";
 import type { z } from "zod";
 
-import Widgets from "@calcom/app-store/routing-forms/components/react-awesome-query-builder/widgets";
 import type {
-  TextLikeComponentProps,
   SelectLikeComponentProps,
+  TextLikeComponentProps,
 } from "@calcom/app-store/routing-forms/components/react-awesome-query-builder/widgets";
+import Widgets from "@calcom/app-store/routing-forms/components/react-awesome-query-builder/widgets";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
-import type { BookingFieldType } from "@calcom/prisma/zod-utils";
 import {
-  PhoneInput,
   AddressInput,
   Button,
-  Label,
-  Group,
-  RadioField,
+  CheckboxField,
   EmailField,
+  Group,
+  Icon,
+  InfoBadge,
+  InputField,
+  Label,
+  PhoneInput,
+  RadioField,
   Tooltip,
-  Checkbox,
 } from "@calcom/ui";
-import { UserPlus, X } from "@calcom/ui/components/icon";
 
-import { ComponentForField } from "./FormBuilder";
-import type { fieldsSchema } from "./FormBuilderFieldsSchema";
+import { ComponentForField } from "./FormBuilderField";
+import { propsTypes } from "./propsTypes";
+import type { fieldSchema, FieldType, variantsConfigSchema } from "./schema";
+import { preprocessNameFieldDataWithVariant } from "./utils";
+
+export const isValidValueProp: Record<Component["propsType"], (val: unknown) => boolean> = {
+  boolean: (val) => typeof val === "boolean",
+  multiselect: (val) => val instanceof Array && val.every((v) => typeof v === "string"),
+  objectiveWithInput: (val) => (typeof val === "object" && val !== null ? "value" in val : false),
+  select: (val) => typeof val === "string",
+  text: (val) => typeof val === "string",
+  textList: (val) => val instanceof Array && val.every((v) => typeof v === "string"),
+  variants: (val) => (typeof val === "object" && val !== null) || typeof val === "string",
+};
 
 type Component =
   | {
@@ -53,11 +66,25 @@ type Component =
           value: string;
           optionValue: string;
         }> & {
-          optionsInputs: NonNullable<z.infer<typeof fieldsSchema>[number]["optionsInputs"]>;
+          optionsInputs: NonNullable<z.infer<typeof fieldSchema>["optionsInputs"]>;
           value: { value: string; optionValue: string };
         } & {
           name?: string;
           required?: boolean;
+          translatedDefaultLabel?: string;
+        }
+      >(
+        props: TProps
+      ) => JSX.Element;
+    }
+  | {
+      propsType: "variants";
+      factory: <
+        TProps extends Omit<TextLikeComponentProps, "value" | "setValue"> & {
+          variant: string | undefined;
+          variants: z.infer<typeof variantsConfigSchema>["variants"];
+          value: Record<string, string> | string | undefined;
+          setValue: (value: string | Record<string, string>) => void;
         }
       >(
         props: TProps
@@ -67,27 +94,101 @@ type Component =
 // TODO: Share FormBuilder components across react-query-awesome-builder(for Routing Forms) widgets.
 // There are certain differences b/w two. Routing Forms expect label to be provided by the widget itself and FormBuilder adds label itself and expect no label to be added by component.
 // Routing Form approach is better as it provides more flexibility to show the label in complex components. But that can't be done right now because labels are missing consistent asterisk required support across different components
-export const Components: Record<BookingFieldType, Component> = {
+export const Components: Record<FieldType, Component> = {
   text: {
-    propsType: "text",
-    factory: (props) => <Widgets.TextWidget noLabel={true} {...props} />,
+    propsType: propsTypes.text,
+    factory: (props) => <Widgets.TextWidget id={props.name} noLabel={true} {...props} />,
   },
   textarea: {
-    propsType: "text",
+    propsType: propsTypes.textarea,
     // TODO: Make rows configurable in the form builder
-    factory: (props) => <Widgets.TextAreaWidget rows={3} {...props} />,
+    factory: (props) => <Widgets.TextAreaWidget id={props.name} rows={3} {...props} />,
   },
   number: {
-    propsType: "text",
-    factory: (props) => <Widgets.NumberWidget noLabel={true} {...props} />,
+    propsType: propsTypes.number,
+    factory: (props) => <Widgets.NumberWidget id={props.name} noLabel={true} {...props} />,
   },
   name: {
-    propsType: "text",
+    propsType: propsTypes.name,
     // Keep special "name" type field and later build split(FirstName and LastName) variant of it.
-    factory: (props) => <Widgets.TextWidget noLabel={true} {...props} />,
+    factory: (props) => {
+      const { variant: variantName = "fullName" } = props;
+      const onChange = (name: string, value: string) => {
+        let currentValue = props.value;
+        if (typeof currentValue !== "object") {
+          currentValue = {};
+        }
+        props.setValue({
+          ...currentValue,
+          [name]: value,
+        });
+      };
+
+      if (!props.variants) {
+        throw new Error("'variants' is required for 'name' type of field");
+      }
+
+      if (variantName !== "firstAndLastName" && variantName !== "fullName") {
+        throw new Error(`Invalid variant name '${variantName}' for 'name' type of field`);
+      }
+
+      const value = preprocessNameFieldDataWithVariant(variantName, props.value);
+
+      if (variantName === "fullName") {
+        if (typeof value !== "string") {
+          throw new Error("Invalid value for 'fullName' variant");
+        }
+        const variant = props.variants[variantName];
+        const variantField = variant.fields[0];
+        return (
+          <InputField
+            name="name"
+            showAsteriskIndicator={true}
+            placeholder={variantField.placeholder}
+            label={variantField.label}
+            containerClassName="w-full"
+            readOnly={props.readOnly}
+            value={value}
+            required={variantField.required}
+            type="text"
+            onChange={(e) => {
+              props.setValue(e.target.value);
+            }}
+          />
+        );
+      }
+
+      const variant = props.variants[variantName];
+
+      if (typeof value !== "object") {
+        throw new Error("Invalid value for 'fullName' variant");
+      }
+
+      return (
+        <div className="flex space-x-4">
+          {variant.fields.map((variantField) => (
+            <InputField
+              // Because the container is flex(and thus margin is being computed towards container height), I need to explicitly ensure that margin-bottom for the input becomes 0, which is mb-2 otherwise
+              className="!mb-0"
+              showAsteriskIndicator={true}
+              key={variantField.name}
+              name={variantField.name}
+              readOnly={props.readOnly}
+              placeholder={variantField.placeholder}
+              label={variantField.label}
+              containerClassName={`w-full testid-${variantField.name}`}
+              value={value[variantField.name as keyof typeof value]}
+              required={variantField.required}
+              type="text"
+              onChange={(e) => onChange(variantField.name, e.target.value)}
+            />
+          ))}
+        </div>
+      );
+    },
   },
   phone: {
-    propsType: "text",
+    propsType: propsTypes.phone,
     factory: ({ setValue, readOnly, ...props }) => {
       if (!props) {
         return <div />;
@@ -105,29 +206,31 @@ export const Components: Record<BookingFieldType, Component> = {
     },
   },
   email: {
-    propsType: "text",
+    propsType: propsTypes.email,
     factory: (props) => {
       if (!props) {
         return <div />;
       }
-      return <Widgets.TextWidget type="email" noLabel={true} {...props} />;
+      return <Widgets.TextWidget type="email" id={props.name} noLabel={true} {...props} />;
     },
   },
   address: {
-    propsType: "text",
+    propsType: propsTypes.address,
     factory: (props) => {
       return (
         <AddressInput
+          id={props.name}
           onChange={(val) => {
             props.setValue(val);
           }}
           {...props}
+          disabled={props.readOnly}
         />
       );
     },
   },
   multiemail: {
-    propsType: "textList",
+    propsType: propsTypes.multiemail,
     //TODO: Make it a ui component
     factory: function MultiEmail({ value, readOnly, label, setValue, ...props }) {
       const placeholder = props.placeholder;
@@ -146,27 +249,26 @@ export const Components: Record<BookingFieldType, Component> = {
                 {value.map((field, index) => (
                   <li key={index}>
                     <EmailField
+                      id={`${props.name}.${index}`}
                       disabled={readOnly}
                       value={value[index]}
                       className={inputClassName}
                       onChange={(e) => {
-                        value[index] = e.target.value;
+                        value[index] = e.target.value.toLowerCase();
                         setValue(value);
                       }}
                       placeholder={placeholder}
                       label={<></>}
                       required
+                      onClickAddon={() => {
+                        value.splice(index, 1);
+                        setValue(value);
+                      }}
                       addOnSuffix={
                         !readOnly ? (
                           <Tooltip content="Remove email">
-                            <button
-                              className="m-1 disabled:hover:cursor-not-allowed"
-                              type="button"
-                              onClick={() => {
-                                value.splice(index, 1);
-                                setValue(value);
-                              }}>
-                              <X width={12} className="text-default" />
+                            <button className="m-1" type="button">
+                              <Icon name="x" width={12} className="text-default" />
                             </button>
                           </Tooltip>
                         ) : null
@@ -180,7 +282,7 @@ export const Components: Record<BookingFieldType, Component> = {
                   data-testid="add-another-guest"
                   type="button"
                   color="minimal"
-                  StartIcon={UserPlus}
+                  StartIcon="user-plus"
                   className="my-2.5"
                   onClick={() => {
                     value.push("");
@@ -199,13 +301,13 @@ export const Components: Record<BookingFieldType, Component> = {
               data-testid="add-guests"
               color="minimal"
               variant="button"
-              StartIcon={UserPlus}
+              StartIcon="user-plus"
               onClick={() => {
                 value.push("");
                 setValue(value);
               }}
-              className="mr-auto">
-              {label}
+              className="mr-auto h-fit whitespace-normal text-left">
+              <span className="flex-1">{label}</span>
             </Button>
           )}
         </>
@@ -213,27 +315,27 @@ export const Components: Record<BookingFieldType, Component> = {
     },
   },
   multiselect: {
-    propsType: "multiselect",
+    propsType: propsTypes.multiselect,
     factory: (props) => {
       const newProps = {
         ...props,
         listValues: props.options.map((o) => ({ title: o.label, value: o.value })),
       };
-      return <Widgets.MultiSelectWidget {...newProps} />;
+      return <Widgets.MultiSelectWidget id={props.name} {...newProps} />;
     },
   },
   select: {
-    propsType: "select",
+    propsType: propsTypes.select,
     factory: (props) => {
       const newProps = {
         ...props,
         listValues: props.options.map((o) => ({ title: o.label, value: o.value })),
       };
-      return <Widgets.SelectWidget {...newProps} />;
+      return <Widgets.SelectWidget id={props.name} {...newProps} />;
     },
   },
   checkbox: {
-    propsType: "multiselect",
+    propsType: propsTypes.checkbox,
     factory: ({ options, readOnly, setValue, value }) => {
       value = value || [];
       return (
@@ -251,11 +353,11 @@ export const Components: Record<BookingFieldType, Component> = {
                     }
                     setValue(newValue);
                   }}
-                  className="border-default dark:border-default hover:bg-subtle checked:hover:bg-brand-default checked:bg-brand-default dark:checked:bg-brand-default dark:bg-darkgray-100 dark:hover:bg-subtle dark:checked:hover:bg-brand-default h-4 w-4 cursor-pointer rounded ltr:mr-2 rtl:ml-2"
+                  className="border-default dark:border-default hover:bg-subtle checked:hover:bg-brand-default checked:bg-brand-default dark:checked:bg-brand-default dark:bg-darkgray-100 dark:hover:bg-subtle dark:checked:hover:bg-brand-default h-4 w-4 cursor-pointer rounded transition ltr:mr-2 rtl:ml-2"
                   value={option.value}
                   checked={value.includes(option.value)}
                 />
-                <span className="text-emphasis ms-2 me-2 text-sm">{option.label ?? ""}</span>
+                <span className="text-emphasis me-2 ms-2 text-sm">{option.label ?? ""}</span>
               </label>
             );
           })}
@@ -264,10 +366,11 @@ export const Components: Record<BookingFieldType, Component> = {
     },
   },
   radio: {
-    propsType: "select",
-    factory: ({ setValue, name, value, options }) => {
+    propsType: propsTypes.radio,
+    factory: ({ setValue, name, value, options, readOnly }) => {
       return (
         <Group
+          disabled={readOnly}
           value={value}
           onValueChange={(e) => {
             setValue(e);
@@ -287,8 +390,17 @@ export const Components: Record<BookingFieldType, Component> = {
     },
   },
   radioInput: {
-    propsType: "objectiveWithInput",
-    factory: function RadioInputWithLabel({ name, options, optionsInputs, value, setValue, readOnly }) {
+    propsType: propsTypes.radioInput,
+    factory: function RadioInputWithLabel({
+      name,
+      label,
+      options,
+      optionsInputs,
+      value,
+      setValue,
+      readOnly,
+      translatedDefaultLabel,
+    }) {
       useEffect(() => {
         if (!value) {
           setValue({
@@ -298,6 +410,29 @@ export const Components: Record<BookingFieldType, Component> = {
         }
       }, [options, setValue, value]);
 
+      const { t } = useLocale();
+
+      const didUserProvideLabel = (
+        label: string | undefined,
+        translatedDefaultLabel: string | undefined
+      ): label is string => {
+        return label && translatedDefaultLabel ? translatedDefaultLabel !== label : false;
+      };
+
+      const getCleanLabel = (label: string): string | JSX.Element => {
+        if (!label) {
+          return "";
+        }
+
+        return label.search(/^https?:\/\//) !== -1 ? (
+          <a href={label} target="_blank">
+            <span className="underline">{label}</span>
+          </a>
+        ) : (
+          label
+        );
+      };
+
       return (
         <div>
           <div>
@@ -305,12 +440,12 @@ export const Components: Record<BookingFieldType, Component> = {
               {options.length > 1 ? (
                 options.map((option, i) => {
                   return (
-                    <label key={i} className="block">
+                    <label key={i} className="mb-1 flex items-center">
                       <input
                         type="radio"
                         disabled={readOnly}
                         name={name}
-                        className="dark:checked:bg-brand-default dark:bg-darkgray-100 dark:hover:bg-subtle dark:checked:hover:bg-brand-default focus:border-brand-default focus:ring-brand-default border-emphasis h-4 w-4 cursor-pointer text-[--cal-brand] focus:ring-2 ltr:mr-2 rtl:ml-2"
+                        className="bg-default after:bg-default border-emphasis focus:ring-brand-default hover:bg-subtle hover:after:bg-subtle dark:checked:after:bg-brand-accent flex h-4 w-4 cursor-pointer items-center justify-center text-[--cal-brand] transition after:h-[6px] after:w-[6px] after:rounded-full after:content-[''] after:hover:block focus:ring-2 focus:ring-offset-0 ltr:mr-2 rtl:ml-2 dark:checked:hover:text-[--cal-brand]"
                         value={option.value}
                         onChange={(e) => {
                           setValue({
@@ -320,18 +455,35 @@ export const Components: Record<BookingFieldType, Component> = {
                         }}
                         checked={value?.value === option.value}
                       />
-                      <span className="text-emphasis ms-2 me-2 text-sm">{option.label ?? ""}</span>
+                      <span className="text-emphasis me-2 ms-2 text-sm">
+                        {option.value === "somewhereElse"
+                          ? t("somewhere_else")
+                          : getCleanLabel(option.label) ?? ""}
+                      </span>
+                      <span>
+                        {option.value === "phone" && (
+                          <InfoBadge content={t("number_in_international_format")} />
+                        )}
+                      </span>
                     </label>
                   );
                 })
               ) : (
-                // Show option itself as label because there is just one option
+                // Use the only option itself to determine if the field is required or not.
                 <>
-                  <Label>
-                    {options[0].label}
+                  <Label className="flex items-center">
+                    {/* We still want to show the label of the field if it is changed by the user otherwise the best label would be the option label */}
+                    {options[0].value === "somewhereElse"
+                      ? translatedDefaultLabel
+                      : getCleanLabel(
+                          didUserProvideLabel(label, translatedDefaultLabel) ? label : options[0].label
+                        )}
                     {!readOnly && optionsInputs[options[0].value]?.required ? (
-                      <span className="text-default ml-1 mb-1 text-sm font-medium">*</span>
+                      <span className="text-default -mb-2 ml-1 text-sm font-medium">*</span>
                     ) : null}
+                    {options[0].value === "phone" && (
+                      <InfoBadge content={t("number_in_international_format")} />
+                    )}
                   </Label>
                 </>
               )}
@@ -366,11 +518,12 @@ export const Components: Record<BookingFieldType, Component> = {
     },
   },
   boolean: {
-    propsType: "boolean",
-    factory: ({ readOnly, label, value, setValue }) => {
+    propsType: propsTypes.boolean,
+    factory: ({ readOnly, name, label, value, setValue }) => {
       return (
         <div className="flex">
-          <Checkbox
+          <CheckboxField
+            name={name}
             onChange={(e) => {
               if (e.target.checked) {
                 setValue(true);
@@ -381,10 +534,18 @@ export const Components: Record<BookingFieldType, Component> = {
             placeholder=""
             checked={value}
             disabled={readOnly}
-            description={label ?? ""}
+            description=""
+            // Form Builder ensures that it would be safe HTML in here if the field type supports it. So, we can safely use label value in `descriptionAsSafeHtml`
+            descriptionAsSafeHtml={label ?? ""}
           />
         </div>
       );
+    },
+  },
+  url: {
+    propsType: propsTypes.url,
+    factory: (props) => {
+      return <Widgets.TextWidget type="url" noLabel={true} {...props} />;
     },
   },
 } as const;

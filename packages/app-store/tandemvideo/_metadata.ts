@@ -8,9 +8,9 @@ export const metadata = {
   type: "tandem_video",
   title: "Tandem Video",
   variant: "conferencing",
-  categories: ["video"],
+  categories: ["conferencing"],
   slug: "tandem",
-  category: "video",
+  category: "conferencing",
   logo: "icon.svg",
   publisher: "",
   url: "",
@@ -24,6 +24,7 @@ export const metadata = {
     },
   },
   dirName: "tandemvideo",
+  isOAuth: true,
 } as AppMeta;
 
 export default metadata;

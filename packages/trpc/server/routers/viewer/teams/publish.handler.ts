@@ -1,74 +1,85 @@
-import { getRequestedSlugError } from "@calcom/app-store/stripepayment/lib/team-billing";
-import { purchaseTeamSubscription } from "@calcom/features/ee/teams/lib/payments";
+import type { Prisma } from "@prisma/client";
+
+import { purchaseTeamOrOrgSubscription } from "@calcom/features/ee/teams/lib/payments";
 import { IS_TEAM_BILLING_ENABLED, WEBAPP_URL } from "@calcom/lib/constants";
+import { Redirect } from "@calcom/lib/redirect";
+import { isOrganisationAdmin } from "@calcom/lib/server/queries/organisations";
 import { isTeamAdmin } from "@calcom/lib/server/queries/teams";
-import { closeComUpdateTeam } from "@calcom/lib/sync/SyncServiceManager";
-import { prisma } from "@calcom/prisma";
+import { TeamRepository } from "@calcom/lib/server/repository/team";
 import { teamMetadataSchema } from "@calcom/prisma/zod-utils";
 
 import { TRPCError } from "@trpc/server";
 
+import type { TrpcSessionUser } from "../../../trpc";
 import type { TPublishInputSchema } from "./publish.schema";
 
 type PublishOptions = {
   ctx: {
-    user: NonNullable<{ id: number }>;
+    user: NonNullable<TrpcSessionUser>;
   };
   input: TPublishInputSchema;
 };
 
-export const publishHandler = async ({ ctx, input }: PublishOptions) => {
-  if (!(await isTeamAdmin(ctx.user.id, input.teamId))) throw new TRPCError({ code: "UNAUTHORIZED" });
-  const { teamId: id } = input;
+const parseMetadataOrThrow = (metadata: Prisma.JsonValue) => {
+  const parsedMetadata = teamMetadataSchema.safeParse(metadata);
 
-  const prevTeam = await prisma.team.findFirst({ where: { id }, include: { members: true } });
+  if (!parsedMetadata.success || !parsedMetadata.data)
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid team metadata" });
+  return parsedMetadata.data;
+};
 
-  if (!prevTeam) throw new TRPCError({ code: "NOT_FOUND", message: "Team not found." });
+const generateCheckoutSession = async ({
+  teamId,
+  seats,
+  userId,
+}: {
+  teamId: number;
+  seats: number;
+  userId: number;
+}) => {
+  if (!IS_TEAM_BILLING_ENABLED) return;
 
-  const metadata = teamMetadataSchema.safeParse(prevTeam.metadata);
-
-  if (!metadata.success) throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid team metadata" });
-
-  // if payment needed, respond with checkout url
-  if (IS_TEAM_BILLING_ENABLED) {
-    const checkoutSession = await purchaseTeamSubscription({
-      teamId: prevTeam.id,
-      seats: prevTeam.members.length,
-      userId: ctx.user.id,
+  const checkoutSession = await purchaseTeamOrOrgSubscription({
+    teamId,
+    seatsUsed: seats,
+    userId,
+    pricePerSeat: null,
+  });
+  if (!checkoutSession.url)
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Failed retrieving a checkout session URL.",
     });
-    if (!checkoutSession.url)
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: "Failed retrieving a checkout session URL.",
-      });
-    return { url: checkoutSession.url, message: "Payment required to publish team" };
-  }
+  return { url: checkoutSession.url, message: "Payment required to publish team" };
+};
 
-  if (!metadata.data?.requestedSlug) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Can't publish team without `requestedSlug`" });
-  }
+async function checkPermissions({ ctx, input }: PublishOptions) {
+  const { profile } = ctx.user;
+  if (profile?.organizationId && !isOrganisationAdmin(ctx.user.id, profile.organizationId))
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+  if (!profile?.organizationId && !(await isTeamAdmin(ctx.user.id, input.teamId)))
+    throw new TRPCError({ code: "UNAUTHORIZED" });
+}
 
-  const { requestedSlug, ...newMetadata } = metadata.data;
-  let updatedTeam: Awaited<ReturnType<typeof prisma.team.update>>;
+export const publishHandler = async ({ ctx, input }: PublishOptions) => {
+  const { teamId } = input;
+  await checkPermissions({ ctx, input });
 
   try {
-    updatedTeam = await prisma.team.update({
-      where: { id },
-      data: {
-        slug: requestedSlug,
-        metadata: { ...newMetadata },
-      },
-    });
+    const { redirectUrl, status } = await TeamRepository.publish(teamId);
+    if (redirectUrl) return { url: redirectUrl, status };
   } catch (error) {
-    const { message } = getRequestedSlugError(error, requestedSlug);
+    /** We return the url for client redirect if needed */
+    if (error instanceof Redirect) return { url: error.url };
+    let message = "Unknown Error on publishHandler";
+    if (error instanceof Error) message = error.message;
     throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
   }
 
-  // Sync Services: Close.com
-  closeComUpdateTeam(prevTeam, updatedTeam);
-
   return {
-    url: `${WEBAPP_URL}/settings/teams/${updatedTeam.id}/profile`,
+    url: `${WEBAPP_URL}/settings/teams/${teamId}/profile`,
     message: "Team published successfully",
   };
 };
+
+export default publishHandler;

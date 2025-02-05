@@ -1,12 +1,11 @@
-import { UsersIcon, XIcon } from "lucide-react";
-import { useRouter } from "next/router";
-import { useState } from "react";
 import type { PropsWithChildren } from "react";
+import { useState } from "react";
 
 import { useFlagMap } from "@calcom/features/flags/context/provider";
 import { useLocale } from "@calcom/lib/hooks/useLocale";
+import { useParamsWithFallback } from "@calcom/lib/hooks/useParamsWithFallback";
 import { trpc } from "@calcom/trpc";
-import { Button, Tooltip, showToast } from "@calcom/ui";
+import { Button, showToast, Tooltip } from "@calcom/ui";
 
 const GoogleIcon = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -35,11 +34,11 @@ function gotoUrl(url: string, newTab?: boolean) {
 export function GoogleWorkspaceInviteButton(
   props: PropsWithChildren<{ onSuccess: (data: string[]) => void }>
 ) {
-  const router = useRouter();
   const featureFlags = useFlagMap();
-  const utils = trpc.useContext();
+  const utils = trpc.useUtils();
   const { t } = useLocale();
-  const teamId = Number(router.query.id);
+  const params = useParamsWithFallback();
+  const teamId = Number(params.id);
   const [googleWorkspaceLoading, setGoogleWorkspaceLoading] = useState(false);
   const { data: credential } = trpc.viewer.googleWorkspace.checkForGWorkspace.useQuery();
   const { data: hasGcalInstalled } = trpc.viewer.appsRouter.checkGlobalKeys.useQuery({
@@ -75,16 +74,16 @@ export function GoogleWorkspaceInviteButton(
               mutation.mutate();
             }}
             className="w-full justify-center gap-2"
-            StartIcon={UsersIcon}
-            loading={mutation.isLoading}>
+            StartIcon="users"
+            loading={mutation.isPending}>
             {t("import_from_google_workspace")}
           </Button>
         </Tooltip>
         <Tooltip content="Remove workspace connection">
           <Button
             color="secondary"
-            loading={removeConnectionMutation.isLoading}
-            StartIcon={XIcon}
+            loading={removeConnectionMutation.isPending}
+            StartIcon="x"
             onClick={() => {
               removeConnectionMutation.mutate();
               utils.viewer.googleWorkspace.checkForGWorkspace.invalidate();
@@ -102,7 +101,7 @@ export function GoogleWorkspaceInviteButton(
       type="button"
       color="secondary"
       loading={googleWorkspaceLoading}
-      StartIcon={GoogleIcon}
+      CustomStartIcon={<GoogleIcon />}
       onClick={async () => {
         setGoogleWorkspaceLoading(true);
         const params = new URLSearchParams({

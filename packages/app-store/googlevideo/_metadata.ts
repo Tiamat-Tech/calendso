@@ -8,8 +8,8 @@ export const metadata = {
   description: _package.description,
   installed: !!(process.env.GOOGLE_API_CREDENTIALS && validJson(process.env.GOOGLE_API_CREDENTIALS)),
   slug: "google-meet",
-  category: "video",
-  categories: ["video"],
+  category: "conferencing",
+  categories: ["conferencing"],
   type: "google_video",
   title: "Google Meet",
   variant: "conferencing",
@@ -27,6 +27,7 @@ export const metadata = {
   },
   dirName: "googlevideo",
   dependencies: ["google-calendar"],
+  isOAuth: false,
 } as AppMeta;
 
 export default metadata;

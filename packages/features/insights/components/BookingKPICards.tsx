@@ -11,12 +11,15 @@ import { KPICard } from "./KPICard";
 export const BookingKPICards = () => {
   const { t } = useLocale();
   const { filter } = useFilterContext();
-  const { dateRange, selectedEventTypeId, selectedUserId, selectedMemberUserId } = filter;
+
+  const { dateRange, selectedEventTypeId, selectedUserId, selectedMemberUserId, isAll, initialConfig } =
+    filter;
+  const initialConfigIsReady = !!(initialConfig?.teamId || initialConfig?.userId || initialConfig?.isAll);
   const [startDate, endDate] = dateRange;
 
   const { selectedTeamId: teamId } = filter;
 
-  const { data, isSuccess, isLoading } = trpc.viewer.insights.eventsByStatus.useQuery(
+  const { data, isSuccess, isPending } = trpc.viewer.insights.eventsByStatus.useQuery(
     {
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
@@ -24,18 +27,28 @@ export const BookingKPICards = () => {
       eventTypeId: selectedEventTypeId ?? undefined,
       memberUserId: selectedMemberUserId ?? undefined,
       userId: selectedUserId ?? undefined,
+      isAll,
     },
     {
       staleTime: 30000,
       trpc: {
         context: { skipBatch: true },
       },
+      enabled: initialConfigIsReady,
     }
   );
 
   const categories: {
     title: string;
-    index: "created" | "completed" | "rescheduled" | "cancelled";
+    index:
+      | "created"
+      | "completed"
+      | "rescheduled"
+      | "cancelled"
+      | "no_show"
+      | "rating"
+      | "csat"
+      | "no_show_guest";
   }[] = [
     {
       title: t("events_created"),
@@ -53,9 +66,25 @@ export const BookingKPICards = () => {
       title: t("events_cancelled"),
       index: "cancelled",
     },
+    {
+      title: t("event_ratings"),
+      index: "rating",
+    },
+    {
+      title: t("event_no_show"),
+      index: "no_show",
+    },
+    {
+      title: t("event_no_show_guest"),
+      index: "no_show_guest",
+    },
+    {
+      title: t("csat_score"),
+      index: "csat",
+    },
   ];
 
-  if (isLoading) {
+  if (isPending) {
     return <LoadingKPICards categories={categories} />;
   }
 
@@ -63,7 +92,7 @@ export const BookingKPICards = () => {
 
   return (
     <>
-      <Grid numColsSm={2} numColsLg={4} className="gap-x-6 gap-y-6">
+      <Grid numColsSm={2} numColsLg={4} className="gap-x-4 gap-y-4">
         {categories.map((item) => (
           <KPICard
             key={item.title}
@@ -81,7 +110,7 @@ export const BookingKPICards = () => {
 const LoadingKPICards = (props: { categories: { title: string; index: string }[] }) => {
   const { categories } = props;
   return (
-    <Grid numColsSm={2} numColsLg={4} className="gap-x-6 gap-y-6">
+    <Grid numColsSm={2} numColsLg={4} className="gap-x-4 gap-y-4">
       {categories.map((item) => (
         <CardInsights key={item.title}>
           <SkeletonContainer className="flex w-full flex-col">

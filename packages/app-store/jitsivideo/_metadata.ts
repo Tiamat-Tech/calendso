@@ -8,7 +8,7 @@ export const metadata = {
   installed: true,
   type: "jitsi_video",
   variant: "conferencing",
-  categories: ["video"],
+  categories: ["conferencing"],
   logo: "icon.svg",
   publisher: "Cal.com",
   url: "https://jitsi.org/",
@@ -24,6 +24,8 @@ export const metadata = {
     },
   },
   dirName: "jitsivideo",
+  concurrentMeetings: true,
+  isOAuth: false,
 } as AppMeta;
 
 export default metadata;

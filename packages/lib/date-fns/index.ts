@@ -31,6 +31,22 @@ export const formatTime = (
 };
 
 /**
+ * Checks if a provided timeZone string is recognized as a valid timezone by dayjs.
+ *
+ * @param {string} timeZone - The timezone string to be verified.
+ * @returns {boolean} - Returns 'true' if the provided timezone string is recognized as a valid timezone by dayjs. Otherwise, returns 'false'.
+ *
+ */
+export const isSupportedTimeZone = (timeZone: string) => {
+  try {
+    dayjs().tz(timeZone);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
  * Returns a localized and translated date or time, based on the native
  * Intl.DateTimeFormat available to JS. Undefined values mean the browser's
  * locale will be used.
@@ -131,7 +147,7 @@ export const isNextDayInTimezone = (time: string, timezoneA: string, timezoneB: 
 };
 
 const weekDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
-type WeekDays = (typeof weekDays)[number];
+export type WeekDays = (typeof weekDays)[number];
 type WeekDayIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 /**
@@ -210,3 +226,15 @@ export const isInDST = (date: Dayjs) => {
 
   return timeZoneWithDST(timeZone) && date.utcOffset() === getUTCOffsetInDST(timeZone);
 };
+
+/**
+ * Get UTC offset of given time zone
+ * @param timeZone Time Zone Name (Ex. America/Mazatlan)
+ * @param date
+ * @returns
+ */
+export function getUTCOffsetByTimezone(timeZone: string, date?: string | Date | Dayjs) {
+  if (!timeZone) return null;
+
+  return dayjs(date).tz(timeZone).utcOffset();
+}
